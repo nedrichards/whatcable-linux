@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=WhatCable
+Comment=Inspect USB-C cable and power capabilities
+Keywords=USB;USB-C;Cable;Power;Thunderbolt;Hardware;Device;
+Exec=whatcable-linux --gui
+Icon=com.nedrichards.WhatCable
+Terminal=false
+Type=Application
+Categories=GTK;GNOME;Settings;HardwareSettings;
+StartupNotify=true

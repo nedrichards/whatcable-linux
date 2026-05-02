@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.nedrichards.WhatCable</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>WhatCable</name>
+  <summary>Inspect USB-C cable and power capabilities</summary>
+  <description>
+    <p>
+      WhatCable reads Linux Type-C and USB Power Delivery sysfs data and shows
+      what each USB-C port, cable, partner, and charger reports.
+    </p>
+    <p>
+      It also reports connected USB devices, Thunderbolt and USB4 data exposed
+      by the kernel, and the raw sysfs values behind each summary.
+    </p>
+  </description>
+  <launchable type="desktop-id">com.nedrichards.WhatCable.desktop</launchable>
+  <developer id="com.nedrichards">
+    <name>Ned Rich Richards</name>
+  </developer>
+  <url type="homepage">https://github.com/nedrichards/whatcable-linux</url>
+  <url type="bugtracker">https://github.com/nedrichards/whatcable-linux/issues</url>
+  <url type="vcs-browser">https://github.com/nedrichards/whatcable-linux</url>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Inspect connected USB devices and exposed power capabilities</caption>
+      <image type="source">https://raw.githubusercontent.com/nedrichards/whatcable-linux/main/data/screenshots/com.nedrichards.WhatCable.png</image>
+    </screenshot>
+  </screenshots>
+  <releases>
+    <release version="0.1.0" date="2026-05-02">
+      <description>
+        <p>Initial release with a GTK interface, JSON output, and read-only Flatpak packaging.</p>
+      </description>
+    </release>
+  </releases>
+  <content_rating type="oars-1.1"/>
+</component>

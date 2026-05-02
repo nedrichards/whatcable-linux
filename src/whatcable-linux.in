@@ -1,0 +1,4 @@
+#!@PYTHON@
+from whatcable_linux.cli import main
+
+raise SystemExit(main())

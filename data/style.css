@@ -1,0 +1,90 @@
+.status-dot {
+  min-width: 12px;
+  min-height: 12px;
+  border-radius: 999px;
+  background: @accent_bg_color;
+}
+
+.status-empty {
+  background: @borders;
+}
+
+.status-charging {
+  background: #26a269;
+}
+
+.status-display {
+  background: #3584e4;
+}
+
+.status-cable {
+  background: #c64600;
+}
+
+.status-device {
+  background: #9141ac;
+}
+
+.status-usb {
+  background: #986a44;
+}
+
+.status-advanced {
+  background: #5e5c64;
+}
+
+.section-label {
+  margin: 14px 12px 8px;
+}
+
+.inspector-hero {
+  padding: 14px;
+}
+
+.hero-icon {
+  border-radius: 8px;
+  color: white;
+  background: @accent_bg_color;
+}
+
+.hero-empty {
+  background: @borders;
+}
+
+.hero-charging {
+  background: #26a269;
+}
+
+.hero-display {
+  background: #3584e4;
+}
+
+.hero-cable {
+  background: #c64600;
+}
+
+.hero-device {
+  background: #9141ac;
+}
+
+.hero-usb {
+  background: #986a44;
+}
+
+.hero-advanced {
+  background: #5e5c64;
+}
+
+.chip-box {
+  margin-top: 2px;
+}
+
+.chip {
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: alpha(@theme_fg_color, 0.08);
+}
+
+.raw-view {
+  padding: 10px;
+}

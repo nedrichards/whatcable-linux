@@ -2,6 +2,8 @@
 
 A GNOME/GTK4 USB-C cable and power diagnostic viewer for Linux.
 
+![WhatCable showing connected USB devices and hardware details](data/screenshots/com.nedrichards.WhatCable.png)
+
 This is a Linux-native reimplementation inspired by
 [`darrylmorley/whatcable`](https://github.com/darrylmorley/whatcable). It reads
 kernel sysfs Type-C and USB Power Delivery classes and presents a plain-English

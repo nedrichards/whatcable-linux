@@ -1,0 +1,27 @@
+{
+  "app-id": "com.nedrichards.WhatCable",
+  "runtime": "org.gnome.Platform",
+  "runtime-version": "50",
+  "sdk": "org.gnome.Sdk",
+  "command": "whatcable-linux",
+  "finish-args": [
+    "--share=ipc",
+    "--socket=wayland",
+    "--socket=fallback-x11",
+    "--device=dri"
+  ],
+  "modules": [
+    {
+      "name": "whatcable-linux",
+      "buildsystem": "meson",
+      "sources": [
+        {
+          "type": "git",
+          "url": "https://github.com/nedrichards/whatcable-linux.git",
+          "tag": "v0.1.0",
+          "commit": "8edd4fcfe4d04e78335d90486bb06e6b0ab0ff7b"
+        }
+      ]
+    }
+  ]
+}

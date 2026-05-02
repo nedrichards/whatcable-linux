@@ -5,7 +5,7 @@ __pycache__/
 
 /_build/
 /build/
-/build-flatpak/
+/build-flatpak*/
 /repo/
 
 /.venv/

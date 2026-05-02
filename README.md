@@ -46,6 +46,10 @@ flatpak run com.nedrichards.WhatCable
 If rofiles-fuse is not available in the build environment, add
 `--disable-rofiles-fuse` to the `flatpak-builder` command.
 
+`build-aux/stable/com.nedrichards.WhatCable.json` is the release-style manifest
+intended for Flathub submission. It builds from the published `v0.1.0` Git tag
+instead of the local checkout.
+
 ## AppStream
 
 The AppStream metadata lives in

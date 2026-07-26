@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import os
 from pathlib import Path
 
 import gi
@@ -21,7 +22,16 @@ gi.require_version("Adw", "1")
 gi.require_version("Gtk", "4.0")
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
 
-APP_ID = "com.nedrichards.WhatCable"
+BASE_APP_ID = "com.nedrichards.WhatCable"
+
+
+def _application_id(flatpak_id: str | None) -> str:
+    if flatpak_id in {BASE_APP_ID, f"{BASE_APP_ID}.Devel"}:
+        return flatpak_id
+    return BASE_APP_ID
+
+
+APP_ID = _application_id(os.environ.get("FLATPAK_ID"))
 
 
 class WhatCableApplication(Adw.Application):

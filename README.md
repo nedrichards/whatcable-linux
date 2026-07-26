@@ -48,12 +48,61 @@ supported on a best-effort basis where they expose compatible sysfs data.
 
 ## Development
 
+WhatCable targets GNOME 50 and is developed Flatpak-first. The development
+manifest uses the local checkout, has a separate application ID, and runs the
+test suite inside the same SDK used to build the app.
+Flatpak Builder renames its desktop file, AppStream metadata, and icon to the
+`.Devel` ID, while the application uses `FLATPAK_ID` for its GTK/D-Bus identity.
+The development and production apps can therefore coexist without registration
+or icon collisions.
+
+Install the GNOME runtime, SDK, and Flatpak Builder application if needed:
+
 ```sh
+flatpak install --user flathub \
+  org.gnome.Platform//50 org.gnome.Sdk//50 org.flatpak.Builder
+```
+
+Build, test, install, and run the development app with:
+
+```sh
+flatpak run org.flatpak.Builder --user --install --force-clean \
+  --disable-rofiles-fuse build-flatpak-devel \
+  build-aux/com.nedrichards.WhatCable.Devel.json
+flatpak run com.nedrichards.WhatCable.Devel
+```
+
+`run-tests` is enabled in the development manifest, so the build fails if the
+Meson test suite fails in GNOME SDK 50. The Pytest wheels used for that build
+are pinned and test-only; they are removed from the completed app. If a host
+`flatpak-builder` command is preferred, use the same arguments without
+`flatpak run org.flatpak.Builder`.
+
+For a shell in the installed development app:
+
+```sh
+flatpak run --command=sh com.nedrichards.WhatCable.Devel
+```
+
+Host checks are useful for quick work on pure Python code, but they are not the
+authoritative packaging or GTK environment:
+
+```sh
+python3 -m pytest -q
+ruff check src tests
 meson setup build
-meson test -C build
-meson install -C build
-whatcable-linux --json --raw
-whatcable-linux
+meson test -C build --print-errorlogs
+```
+
+Keep host Meson output in `build/`. GNOME Builder uses `_build/` with the SDK's
+Meson, so running host Meson against `_build/` can produce the incompatible
+Meson-version error. In GNOME Builder, select
+`build-aux/com.nedrichards.WhatCable.Devel.json` for local development.
+
+To exercise the CLI with the same sandbox and permissions as the application:
+
+```sh
+flatpak run com.nedrichards.WhatCable.Devel --json --raw
 ```
 
 ## Flatpak
@@ -76,19 +125,11 @@ sudo setfacl -m "u:${USER}:r" /dev/cros_ec
 WhatCable opens the device read-only and only issues
 `EC_CMD_USB_PD_POWER_INFO`; it does not expose arbitrary EC commands.
 
-Build locally with:
-
-```sh
-flatpak-builder --user --install --force-clean build-flatpak build-aux/com.nedrichards.WhatCable.json
-flatpak run com.nedrichards.WhatCable
-```
-
-If rofiles-fuse is not available in the build environment, add
-`--disable-rofiles-fuse` to the `flatpak-builder` command.
-
 `build-aux/stable/com.nedrichards.WhatCable.json` is the release-style manifest
 intended for Flathub submission. It builds from the published `v0.1.0` Git tag
-instead of the local checkout.
+and exact commit instead of the local checkout. Use the `.Devel` manifest for
+ordinary development; only repin the stable manifest as part of an explicit
+release.
 
 ## AppStream
 

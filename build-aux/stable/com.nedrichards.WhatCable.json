@@ -14,6 +14,11 @@
     {
       "name": "whatcable-linux",
       "buildsystem": "meson",
+      "builddir": true,
+      "config-opts": [
+        "--prefix=/app",
+        "-Dbuildtype=release"
+      ],
       "sources": [
         {
           "type": "git",

@@ -1,5 +1,6 @@
 .flatpak-builder/
 .pytest_cache/
+.ruff_cache/
 __pycache__/
 *.py[cod]
 
@@ -7,6 +8,10 @@ __pycache__/
 /build/
 /build-flatpak*/
 /repo/
+/*.flatpak
 
 /.venv/
 /venv/
+
+/.agents/
+/.codex/

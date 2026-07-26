@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .advanced_sources import scan_advanced_sources
+from .chrome_ec import scan_chrome_ec
 from .models import SystemReport
 from .sysfs import scan as scan_typec
 from .usb_sysfs import scan_usb_devices
@@ -15,9 +16,13 @@ def scan_system(
     thunderbolt_root: Path | str = "/sys/bus/thunderbolt/devices",
     usb4_root: Path | str = "/sys/bus/usb4/devices",
     debug_usb_devices: Path | str = "/sys/kernel/debug/usb/devices",
+    chrome_ec_root: Path | str = "/sys/class/chromeos/cros_ec",
+    chrome_ec_device: Path | str = "/dev/cros_ec",
 ) -> SystemReport:
+    advanced_devices = scan_advanced_sources(thunderbolt_root, usb4_root, debug_usb_devices)
+    advanced_devices.extend(scan_chrome_ec(chrome_ec_root, chrome_ec_device))
     return SystemReport(
         typec_ports=scan_typec(typec_root, pd_root),
         usb_devices=scan_usb_devices(usb_root),
-        advanced_devices=scan_advanced_sources(thunderbolt_root, usb4_root, debug_usb_devices),
+        advanced_devices=advanced_devices,
     )

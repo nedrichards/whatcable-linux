@@ -29,7 +29,7 @@ def summarize_port(port: TypeCPort) -> PortSummary:
         best = max(port.source_capabilities, key=lambda option: option.max_power_mw)
         bullets.append(f"Source advertises up to {best.watts_label}")
         bullets.extend(
-            f"{option.volts_label} @ {option.amps_label} ({option.watts_label})"
+            option.detail_label
             for option in port.source_capabilities
         )
 

@@ -473,22 +473,24 @@ Add a diagnostic section that explains why a source is unavailable:
 
 This will make the app useful on many machines without over-promising.
 
-### Medium Term
+### Implemented Prototype
 
-Prototype a read-only Framework EC helper that queries:
+WhatCable now directly supports the read-only Chrome EC query:
 
 - `EC_CMD_USB_PD_POWER_INFO`
-- PD controller firmware info through the same safe paths used by
-  `framework_tool --pd-info`
 
-This would allow WhatCable to show meaningful Framework-specific USB-C data:
+When `/dev/cros_ec` is visible and readable, this allows WhatCable to show:
 
 - port connected/disconnected state
 - sink/source role
 - charging type
 - negotiated voltage/current
 - max power
-- PD controller firmware versions
+
+The backend opens the device read-only and has no generic EC command API. The
+Flatpak manifests expose devices because this is a hardware-inspection app, but
+host permissions remain authoritative. PD controller firmware information from
+the I2C passthrough path remains future work.
 
 The helper should return structured data, not terminal text.
 
@@ -536,4 +538,3 @@ Possible outline:
 
 The main lesson is that the hardware may know more than Linux userspace can
 currently access through stable, unprivileged interfaces.
-

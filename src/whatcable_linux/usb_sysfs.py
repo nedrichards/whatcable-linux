@@ -36,11 +36,10 @@ USB_INTERFACE_FIELDS = (
 
 def scan_usb_devices(usb_root: Path | str = "/sys/bus/usb/devices") -> list[UsbDevice]:
     usb_root = Path(usb_root)
-    if not usb_root.exists():
-        return []
+    entries = sorted(_safe_iterdir(usb_root), key=lambda item: item.name)
 
     devices: list[UsbDevice] = []
-    for path in sorted(usb_root.iterdir(), key=lambda item: item.name):
+    for path in entries:
         real = _safe_resolve(path)
         if not real.is_dir() or ":" in path.name:
             continue
@@ -69,7 +68,7 @@ def scan_usb_devices(usb_root: Path | str = "/sys/bus/usb/devices") -> list[UsbD
                 driver=_driver_name(real),
                 tx_lanes=raw.get("tx_lanes"),
                 rx_lanes=raw.get("rx_lanes"),
-                interfaces=_read_interfaces(usb_root, path.name),
+                interfaces=_read_interfaces(entries, path.name),
                 raw=raw,
             )
         )
@@ -141,10 +140,10 @@ def usb_device_bullets(device: UsbDevice) -> list[str]:
     return bullets
 
 
-def _read_interfaces(usb_root: Path, device_name: str) -> list[UsbInterface]:
+def _read_interfaces(entries: list[Path], device_name: str) -> list[UsbInterface]:
     interfaces: list[UsbInterface] = []
     prefix = f"{device_name}:"
-    for path in sorted(usb_root.iterdir(), key=lambda item: item.name):
+    for path in entries:
         if not path.name.startswith(prefix):
             continue
         real = _safe_resolve(path)
@@ -170,6 +169,13 @@ def _safe_resolve(path: Path) -> Path:
         return path.resolve()
     except OSError:
         return path
+
+
+def _safe_iterdir(path: Path) -> list[Path]:
+    try:
+        return list(path.iterdir())
+    except (FileNotFoundError, PermissionError, OSError):
+        return []
 
 
 def _read_fields(path: Path, fields: tuple[str, ...]) -> dict[str, str]:

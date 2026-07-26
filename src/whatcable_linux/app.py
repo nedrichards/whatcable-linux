@@ -6,15 +6,20 @@ from pathlib import Path
 
 import gi
 
-gi.require_version("Adw", "1")
-gi.require_version("Gtk", "4.0")
-from gi.repository import Adw, Gdk, Gio, GLib, Gtk, Pango  # noqa: E402
-
-from . import __version__
+from .chrome_ec import (
+    chrome_ec_port_status,
+    chrome_ec_port_subtitle,
+    chrome_ec_port_title,
+    is_chrome_ec_port,
+)
+from .naming import usb_class_label
 from .report import scan_system
 from .summary import summarize_port
-from .naming import usb_class_label
 from .usb_sysfs import is_root_hub, summarize_usb_device, usb_device_bullets, usb_device_name
+
+gi.require_version("Adw", "1")
+gi.require_version("Gtk", "4.0")
+from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
 
 APP_ID = "com.nedrichards.WhatCable"
 
@@ -62,14 +67,19 @@ class WhatCableApplication(Adw.Application):
     def refresh(self) -> None:
         report = scan_system()
         usb_devices = [device for device in report.usb_devices if not is_root_hub(device)]
+        ec_ports = [device for device in report.advanced_devices if is_chrome_ec_port(device)]
+        advanced_devices = [
+            device for device in report.advanced_devices if not is_chrome_ec_port(device)
+        ]
         total_items = len(report.typec_ports) + len(usb_devices) + len(report.advanced_devices)
         if self.status_label is not None:
             if total_items:
-                self.status_label.set_label(f"{total_items} devices")
+                self.status_label.set_label(f"{total_items} items")
                 self.status_label.set_tooltip_text(
-                    f"{len(report.typec_ports)} USB-C ports\n"
+                    f"{len(report.typec_ports)} kernel USB-C ports\n"
+                    f"{len(ec_ports)} EC USB-C ports\n"
                     f"{len(usb_devices)} USB devices\n"
-                    f"{len(report.advanced_devices)} advanced sources"
+                    f"{len(advanced_devices)} advanced sources"
                 )
             else:
                 self.status_label.set_label("No devices")
@@ -106,6 +116,23 @@ class WhatCableApplication(Adw.Application):
                 self._show_port(port)
                 shown_selection = True
 
+        if ec_ports:
+            self.port_list.append(_section_label("Framework USB-C Ports"))
+        for device in ec_ports:
+            row = Adw.ActionRow(
+                title=chrome_ec_port_title(device),
+                subtitle=chrome_ec_port_subtitle(device),
+            )
+            row.add_prefix(_status_dot(chrome_ec_port_status(device)))
+            row.set_activatable(True)
+            row.connect("activated", lambda _row, selected=device: self._show_advanced_device(selected))
+            self.port_list.append(row)
+            if first_item is None:
+                first_item = ("advanced", device)
+            if target_kind == "advanced" and target_key == f"{device.source}:{device.name}":
+                self._show_advanced_device(device)
+                shown_selection = True
+
         if usb_devices:
             self.port_list.append(_section_label("USB Devices"))
         for device in usb_devices:
@@ -121,9 +148,9 @@ class WhatCableApplication(Adw.Application):
                 self._show_usb_device(device)
                 shown_selection = True
 
-        if report.advanced_devices:
+        if advanced_devices:
             self.port_list.append(_section_label("Advanced Sources"))
-        for device in report.advanced_devices:
+        for device in advanced_devices:
             row = Adw.ActionRow(title=device.name, subtitle=f"{device.source} · {device.summary or device.name}")
             row.add_prefix(_status_dot("advanced"))
             row.set_activatable(True)
@@ -273,15 +300,42 @@ class WhatCableApplication(Adw.Application):
         self.selected_item = device
         _clear_box(self.details)
 
+        is_ec_port = is_chrome_ec_port(device)
+        status = chrome_ec_port_status(device) if is_ec_port else "advanced"
+        title = chrome_ec_port_title(device) if is_ec_port else device.name
+        subtitle = chrome_ec_port_subtitle(device) if is_ec_port else device.summary or device.source
         chips = [device.source]
+        if is_ec_port:
+            chips.extend(
+                value
+                for value in (
+                    device.properties.get("role"),
+                    device.properties.get("charging_type"),
+                )
+                if value and value != "None"
+            )
         if device.sysfs_path:
             chips.append(Path(device.sysfs_path).name)
-        self.details.append(_hero("applications-system-symbolic", "advanced", device.name, device.summary or device.source, chips))
+        icon = "drive-removable-media-symbolic" if is_ec_port else "applications-system-symbolic"
+        self.details.append(_hero(icon, status, title, subtitle, chips))
 
-        properties = Adw.PreferencesGroup(title="Properties")
+        if is_ec_port:
+            self.details.append(_metric_grid(_ec_port_metrics(device)))
+
+        properties = Adw.PreferencesGroup(title="Details" if is_ec_port else "Properties")
         if device.sysfs_path:
             properties.add(_row("Path", device.sysfs_path, icon="folder-symbolic"))
-        for key, value in device.properties.items():
+        displayed_properties = (
+            {
+                "ec_port": device.name,
+                "dual_role": device.properties.get("dual_role", "Unknown"),
+                "voltage_max": device.properties.get("voltage_max", "Unknown"),
+                "current_max": device.properties.get("current_max", "Unknown"),
+            }
+            if is_ec_port
+            else device.properties
+        )
+        for key, value in displayed_properties.items():
             properties.add(_row(key.replace("_", " ").title(), value, icon="dialog-information-symbolic"))
         self.details.append(properties)
 
@@ -365,6 +419,7 @@ class WhatCableApplication(Adw.Application):
             "/sys/bus/usb/devices",
             "/sys/bus/thunderbolt/devices",
             "/sys/bus/usb4/devices",
+            "/sys/class/chromeos/cros_ec",
         ):
             file = Gio.File.new_for_path(path)
             if not file.query_exists(None):
@@ -464,6 +519,29 @@ def _metric_grid(metrics: list[tuple[str, str]]) -> Adw.PreferencesGroup:
     for label, value in metrics:
         group.add(_row(label, value))
     return group
+
+
+def _ec_port_metrics(device) -> list[tuple[str, str]]:
+    properties = device.properties
+    role = properties.get("role", "Unknown")
+    if role == "Disconnected":
+        return [("State", "Disconnected")]
+
+    metrics = [("State", "Connected"), ("Power role", role)]
+    charging_type = properties.get("charging_type")
+    if charging_type and charging_type != "None":
+        metrics.append(("Charging", charging_type))
+
+    voltage = properties.get("voltage_now")
+    current = properties.get("current_limit")
+    live_values = [value for value in (voltage, current) if value not in {None, "0 V", "0 A"}]
+    if live_values:
+        metrics.append(("Now", " · ".join(live_values)))
+
+    max_power = properties.get("max_power")
+    if max_power and max_power != "0 W":
+        metrics.append(("Maximum", max_power))
+    return metrics
 
 
 def _raw_group(payload: dict) -> Adw.PreferencesGroup:

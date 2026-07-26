@@ -40,11 +40,8 @@ def scan_advanced_sources(
 
 
 def _scan_bus(source: str, root: Path) -> list[AdvancedDevice]:
-    if not root.exists():
-        return []
-
     devices: list[AdvancedDevice] = []
-    for path in sorted(root.iterdir(), key=lambda item: item.name):
+    for path in sorted(_safe_iterdir(root), key=lambda item: item.name):
         real = _safe_resolve(path)
         if not real.is_dir():
             continue
@@ -140,3 +137,10 @@ def _safe_resolve(path: Path) -> Path:
         return path.resolve()
     except OSError:
         return path
+
+
+def _safe_iterdir(path: Path) -> list[Path]:
+    try:
+        return list(path.iterdir())
+    except (FileNotFoundError, PermissionError, OSError):
+        return []

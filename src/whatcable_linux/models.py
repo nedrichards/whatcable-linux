@@ -73,8 +73,10 @@ class TypeCPlug:
 @dataclass(frozen=True)
 class PowerOption:
     voltage_mv: int
-    max_current_ma: int
+    max_current_ma: int | None
     max_power_mw: int
+    min_voltage_mv: int | None = None
+    supply_type: str = "fixed_supply"
     raw: int | None = None
 
     @property
@@ -83,15 +85,25 @@ class PowerOption:
 
     @property
     def volts_label(self) -> str:
+        if self.min_voltage_mv is not None and self.min_voltage_mv != self.voltage_mv:
+            return f"{self.min_voltage_mv / 1000:g}\u2013{self.voltage_mv / 1000:g}V"
         return f"{self.voltage_mv / 1000:g}V"
 
     @property
     def amps_label(self) -> str:
+        if self.max_current_ma is None:
+            return ""
         return f"{self.max_current_ma / 1000:.2f}A"
 
     @property
     def watts_label(self) -> str:
         return f"{self.watts:g}W"
+
+    @property
+    def detail_label(self) -> str:
+        if self.max_current_ma is None:
+            return f"{self.volts_label} ({self.watts_label})"
+        return f"{self.volts_label} @ {self.amps_label} ({self.watts_label})"
 
 
 @dataclass(frozen=True)

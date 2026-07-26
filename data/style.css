@@ -13,6 +13,10 @@
   background: #26a269;
 }
 
+.status-source {
+  background: #3584e4;
+}
+
 .status-display {
   background: #3584e4;
 }
@@ -53,6 +57,10 @@
 
 .hero-charging {
   background: #26a269;
+}
+
+.hero-source {
+  background: #3584e4;
 }
 
 .hero-display {

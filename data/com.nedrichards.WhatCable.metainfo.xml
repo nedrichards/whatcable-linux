@@ -17,7 +17,7 @@
   </description>
   <launchable type="desktop-id">com.nedrichards.WhatCable.desktop</launchable>
   <developer id="com.nedrichards">
-    <name>Ned Rich Richards</name>
+    <name>Nick Richards</name>
   </developer>
   <url type="homepage">https://github.com/nedrichards/whatcable-linux</url>
   <url type="bugtracker">https://github.com/nedrichards/whatcable-linux/issues</url>

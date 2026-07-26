@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from whatcable_linux.usb_sysfs import scan_usb_devices, summarize_usb_device, usb_device_bullets
 
 
@@ -35,3 +37,20 @@ def test_scan_usb_devices_fixture(tmp_path: Path) -> None:
 
 def test_scan_usb_devices_missing_root(tmp_path: Path) -> None:
     assert scan_usb_devices(tmp_path / "missing") == []
+
+
+def test_scan_usb_devices_ignores_directory_removed_during_refresh(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    usb = tmp_path / "usb"
+    usb.mkdir()
+    original_iterdir = Path.iterdir
+
+    def disappearing_iterdir(path: Path):
+        if path == usb:
+            raise FileNotFoundError(path)
+        return original_iterdir(path)
+
+    monkeypatch.setattr(Path, "iterdir", disappearing_iterdir)
+
+    assert scan_usb_devices(usb) == []

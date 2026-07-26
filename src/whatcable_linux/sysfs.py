@@ -65,10 +65,8 @@ def _replace_port_capabilities(port: TypeCPort, source_capabilities: list[PowerO
 
 
 def _port_paths(typec_root: Path) -> list[Path]:
-    if not typec_root.exists():
-        return []
     return sorted(
-        path for path in typec_root.iterdir()
+        path for path in _safe_iterdir(typec_root)
         if path.name.startswith("port") and "-partner" not in path.name and "-cable" not in path.name and "-plug" not in path.name
     )
 
@@ -153,7 +151,7 @@ def _first_existing_child(port_path: Path, name: str) -> Path | None:
 
 def _read_alt_modes(path: Path) -> list[str]:
     modes: list[str] = []
-    for child in sorted(path.iterdir()) if path.exists() else []:
+    for child in sorted(_safe_iterdir(path)):
         if "-mode" not in child.name and not child.name.startswith(f"{path.name}."):
             continue
         fields = _read_fields(child, ("description", "mode", "svid", "vdo"))
@@ -191,20 +189,105 @@ def _read_identity(path: Path) -> Identity | None:
 
 
 def _read_power_delivery_capabilities(pd_root: Path) -> dict[str, list[PowerOption]]:
-    if not pd_root.exists():
-        return {}
-
     capabilities: dict[str, list[PowerOption]] = {}
-    for path in pd_root.rglob("*"):
-        if not path.is_file() or path.name != "source-capabilities":
+    for device_path in _safe_iterdir(pd_root):
+        path = device_path / "source-capabilities"
+        if not path.exists():
             continue
-        options = _parse_source_capabilities(_read_text(path))
+        if path.is_dir():
+            options = _read_source_capability_directory(path)
+        else:
+            # Compatibility with early/driver-specific raw PDO attributes.
+            options = _parse_source_capabilities(_read_text(path))
         if not options:
             continue
         port_name = _guess_port_name(path)
         if port_name:
             capabilities.setdefault(port_name, []).extend(options)
     return capabilities
+
+
+def _read_source_capability_directory(path: Path) -> list[PowerOption]:
+    options: list[PowerOption] = []
+    entries = sorted(_safe_iterdir(path), key=_pdo_sort_key)
+    for entry in entries:
+        _, separator, supply_type = entry.name.partition(":")
+        if not separator or not entry.is_dir():
+            continue
+        if supply_type == "fixed_supply":
+            option = _current_based_option(entry, supply_type, "voltage")
+            if option is not None:
+                options.append(option)
+        elif supply_type in {"variable_supply", "programmable_supply"}:
+            option = _current_based_option(entry, supply_type, "maximum_voltage")
+            if option is not None:
+                options.append(option)
+        elif supply_type == "battery":
+            option = _battery_option(entry)
+            if option is not None:
+                options.append(option)
+        elif supply_type == "spr_adjustable_voltage_supply":
+            options.extend(_adjustable_voltage_options(entry))
+    return options
+
+
+def _current_based_option(path: Path, supply_type: str, voltage_field: str) -> PowerOption | None:
+    voltage_mv = parse_int(_read_text(path / voltage_field))
+    current_ma = parse_int(_read_text(path / "maximum_current"))
+    if voltage_mv is None or voltage_mv <= 0 or current_ma is None or current_ma <= 0:
+        return None
+    min_voltage_mv = parse_int(_read_text(path / "minimum_voltage"))
+    return PowerOption(
+        voltage_mv=voltage_mv,
+        min_voltage_mv=min_voltage_mv,
+        max_current_ma=current_ma,
+        max_power_mw=voltage_mv * current_ma // 1000,
+        supply_type=supply_type,
+    )
+
+
+def _battery_option(path: Path) -> PowerOption | None:
+    voltage_mv = parse_int(_read_text(path / "maximum_voltage"))
+    power_mw = parse_int(_read_text(path / "maximum_power"))
+    if voltage_mv is None or voltage_mv <= 0 or power_mw is None or power_mw <= 0:
+        return None
+    return PowerOption(
+        voltage_mv=voltage_mv,
+        min_voltage_mv=parse_int(_read_text(path / "minimum_voltage")),
+        max_current_ma=None,
+        max_power_mw=power_mw,
+        supply_type="battery",
+    )
+
+
+def _adjustable_voltage_options(path: Path) -> list[PowerOption]:
+    ranges = (
+        (9_000, 15_000, "maximum_current_9V_to_15V"),
+        (15_000, 20_000, "maximum_current_15V_to_20V"),
+    )
+    options: list[PowerOption] = []
+    for minimum_mv, maximum_mv, current_field in ranges:
+        current_ma = parse_int(_read_text(path / current_field))
+        if current_ma is None or current_ma <= 0:
+            continue
+        options.append(
+            PowerOption(
+                voltage_mv=maximum_mv,
+                min_voltage_mv=minimum_mv,
+                max_current_ma=current_ma,
+                max_power_mw=maximum_mv * current_ma // 1000,
+                supply_type="spr_adjustable_voltage_supply",
+            )
+        )
+    return options
+
+
+def _pdo_sort_key(path: Path) -> tuple[int, str]:
+    position, _, _ = path.name.partition(":")
+    try:
+        return int(position), path.name
+    except ValueError:
+        return 2**31 - 1, path.name
 
 
 def _parse_source_capabilities(text: str | None) -> list[PowerOption]:
@@ -251,6 +334,13 @@ def _read_text(path: Path) -> str | None:
         return path.read_text(encoding="utf-8").strip()
     except (FileNotFoundError, IsADirectoryError, PermissionError, OSError, UnicodeDecodeError):
         return None
+
+
+def _safe_iterdir(path: Path) -> list[Path]:
+    try:
+        return list(path.iterdir())
+    except (FileNotFoundError, PermissionError, OSError):
+        return []
 
 
 def _parse_bool(value: str | None) -> bool | None:

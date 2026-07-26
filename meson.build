@@ -14,6 +14,7 @@ python.install_sources(
     'src/whatcable_linux/__main__.py',
     'src/whatcable_linux/advanced_sources.py',
     'src/whatcable_linux/app.py',
+    'src/whatcable_linux/chrome_ec.py',
     'src/whatcable_linux/cli.py',
     'src/whatcable_linux/models.py',
     'src/whatcable_linux/naming.py',

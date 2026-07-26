@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from whatcable_linux.advanced_sources import scan_advanced_sources
 
 
@@ -44,3 +46,22 @@ def test_scan_debug_usb_fixture(tmp_path: Path) -> None:
     assert len(devices) == 1
     assert devices[0].source == "USB debugfs"
     assert devices[0].summary == "Bluetooth Device · Intel"
+
+
+def test_scan_advanced_sources_ignores_directory_removed_during_refresh(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    thunderbolt = tmp_path / "thunderbolt"
+    thunderbolt.mkdir()
+    original_iterdir = Path.iterdir
+
+    def disappearing_iterdir(path: Path):
+        if path == thunderbolt:
+            raise FileNotFoundError(path)
+        return original_iterdir(path)
+
+    monkeypatch.setattr(Path, "iterdir", disappearing_iterdir)
+
+    assert scan_advanced_sources(
+        thunderbolt, tmp_path / "missing-usb4", tmp_path / "missing-debug"
+    ) == []

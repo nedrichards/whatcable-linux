@@ -15,3 +15,7 @@ __pycache__/
 
 /.agents/
 /.codex/
+
+# Nix
+/result
+/result-*

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import gi
 
+from .altmode import CableAltModeCompatibility, cable_altmode_compatibility, cable_altmode_explanation
 from .chrome_ec import (
     chrome_ec_port_status,
     chrome_ec_port_subtitle,
@@ -222,14 +223,27 @@ class WhatCableApplication(Adw.Application):
             if port.partner.supports_usb_power_delivery is not None:
                 partner.add(_row("Power Delivery", "Yes" if port.partner.supports_usb_power_delivery else "No"))
             for mode in port.partner.alt_modes:
-                partner.add(_row("Alt mode", mode))
+                compatibility = cable_altmode_compatibility(port, mode)
+                compatibility_label = {
+                    CableAltModeCompatibility.SUPPORTED: "Yes",
+                    CableAltModeCompatibility.UNSUPPORTED: "No",
+                    CableAltModeCompatibility.UNKNOWN: "Unknown",
+                }[compatibility]
+                partner.add(
+                    _row(
+                        mode.label,
+                        f"Device advertises {mode.label}\n"
+                        f"Cable compatibility: {compatibility_label}\n"
+                        f"{cable_altmode_explanation(port, mode, compatibility)}",
+                    )
+                )
             self.details.append(partner)
 
         if port.cable:
             cable = Adw.PreferencesGroup(title="Cable")
             cable.add(_row("Name", port.cable.name, icon="drive-removable-media-symbolic"))
-            if port.cable.active is not None:
-                cable.add(_row("Type", "Active" if port.cable.active else "Passive"))
+            if port.cable.cable_type:
+                cable.add(_row("Type", port.cable.cable_type.title()))
             if port.cable.identity:
                 cable.add(_row("Identity", "Exposed by kernel"))
             self.details.append(cable)

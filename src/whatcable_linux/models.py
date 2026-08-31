@@ -49,14 +49,37 @@ class TypeCPartner:
     accessory_mode: str | None = None
     supports_usb_power_delivery: bool | None = None
     identity: Identity | None = None
-    alt_modes: list[str] = field(default_factory=list)
+    alt_modes: list[TypeCAltMode] = field(default_factory=list)
     raw: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class TypeCAltMode:
+    name: str
+    sysfs_path: str
+    description: str | None = None
+    svid: int | None = None
+    mode: int | None = None
+    vdo: int | None = None
+    active: bool | None = None
+    raw: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def label(self) -> str:
+        if self.description:
+            return self.description
+        if self.svid is not None and self.mode is not None:
+            return f"SVID {self.svid:04x}, mode {self.mode}"
+        if self.svid is not None:
+            return f"SVID {self.svid:04x}"
+        return self.name
 
 
 @dataclass(frozen=True)
 class TypeCCable:
     name: str
     sysfs_path: str
+    cable_type: str | None = None
     active: bool | None = None
     identity: Identity | None = None
     raw: dict[str, str] = field(default_factory=dict)
@@ -67,6 +90,7 @@ class TypeCPlug:
     name: str
     sysfs_path: str
     identity: Identity | None = None
+    alt_modes: list[TypeCAltMode] = field(default_factory=list)
     raw: dict[str, str] = field(default_factory=dict)
 
 

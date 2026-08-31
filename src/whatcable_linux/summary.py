@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from .altmode import CableAltModeCompatibility, cable_altmode_compatibility
 from .models import PortSummary, TypeCPort
 from .pd import decode_cable_vdo, decode_id_header
 
@@ -23,7 +24,17 @@ def summarize_port(port: TypeCPort) -> PortSummary:
     if port.partner and port.partner.accessory_mode:
         bullets.append(f"Accessory mode: {port.partner.accessory_mode}")
     if port.partner and port.partner.alt_modes:
-        bullets.append("Alt modes: " + ", ".join(port.partner.alt_modes))
+        for altmode in port.partner.alt_modes:
+            compatibility = cable_altmode_compatibility(port, altmode)
+            compatibility_label = {
+                CableAltModeCompatibility.SUPPORTED: "Yes",
+                CableAltModeCompatibility.UNSUPPORTED: "No",
+                CableAltModeCompatibility.UNKNOWN: "Unknown",
+            }[compatibility]
+            bullets.append(
+                f"Alt mode: {altmode.label} (advertised by device; "
+                f"cable compatibility: {compatibility_label})"
+            )
 
     if port.source_capabilities:
         best = max(port.source_capabilities, key=lambda option: option.max_power_mw)
@@ -38,10 +49,17 @@ def summarize_port(port: TypeCPort) -> PortSummary:
         if cable_identity.id_header is not None:
             header = decode_id_header(cable_identity.id_header)
             bullets.append(f"Cable identity: {header.product_label}")
-        cable_vdo_raw = (
-            cable_identity.product_type_vdo1
-            or cable_identity.product_type_vdo2
-            or cable_identity.product_type_vdo3
+        cable_vdo_raw = next(
+            (
+                value
+                for value in (
+                    cable_identity.product_type_vdo1,
+                    cable_identity.product_type_vdo2,
+                    cable_identity.product_type_vdo3,
+                )
+                if value is not None
+            ),
+            None,
         )
         if cable_vdo_raw is not None:
             cable_vdo = decode_cable_vdo(cable_vdo_raw, active=port.cable.active is True)
@@ -68,7 +86,16 @@ def summarize_port(port: TypeCPort) -> PortSummary:
     elif port.partner and port.partner.alt_modes:
         headline = "USB-C alt mode device"
         status = "display"
-        subtitle = "The kernel reports alternate mode support."
+        compatibilities = [
+            cable_altmode_compatibility(port, altmode)
+            for altmode in port.partner.alt_modes
+        ]
+        if CableAltModeCompatibility.UNSUPPORTED in compatibilities:
+            subtitle = "The device advertises an alternate mode, but the cable is incompatible."
+        elif all(value is CableAltModeCompatibility.SUPPORTED for value in compatibilities):
+            subtitle = "The device advertises an alternate mode and the cable does not prevent it."
+        else:
+            subtitle = "The device advertises an alternate mode; cable compatibility is unknown."
     elif port.cable and port.cable.identity:
         headline = "USB-C cable with identity"
         status = "cable"

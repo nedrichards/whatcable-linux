@@ -38,6 +38,14 @@ the hardware, firmware, and Type-C driver as well as the kernel. Missing sysfs
 classes or individual attributes are treated as unavailable data, and devices
 may appear or disappear safely while a scan is running.
 
+WhatCable also compares partner alternate modes with the cable identity and
+SOP' plug alternate modes exposed through the existing Type-C sysfs ABI. It
+reports compatibility as yes, no, or unknown, preserving unknown when firmware
+does not provide enough cable information. Linux 7.3 and newer use the same
+information to reject definitely incompatible DisplayPort and Thunderbolt
+alternate modes; WhatCable's diagnostic is not kernel-version-gated and also
+works on older kernels when their drivers expose the data.
+
 Development and testing track the author's current Fedora Silverblue system.
 The latest recorded baseline is Fedora Silverblue 44 (`44.20260724.0`) with
 kernel `7.1.4-204.fc44.x86_64`, checked on 26 July 2026. Older kernels are

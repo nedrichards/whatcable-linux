@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from .models import Identity, PowerOption, TypeCCable, TypeCPartner, TypeCPlug, TypeCPort
+from .models import Identity, PowerOption, TypeCAltMode, TypeCCable, TypeCPartner, TypeCPlug, TypeCPort
 from .pd import decode_fixed_supply_pdo, parse_int
 
 PORT_FIELDS = (
@@ -20,7 +20,8 @@ PARTNER_FIELDS = (
 )
 
 CABLE_FIELDS = (
-    "active",
+    "type",
+    "plug_type",
 )
 
 IDENTITY_FIELDS = (
@@ -119,7 +120,8 @@ def _read_cable(port_path: Path) -> TypeCCable | None:
     return TypeCCable(
         name=path.name,
         sysfs_path=str(path),
-        active=_parse_bool(raw.get("active")),
+        cable_type=raw.get("type"),
+        active=_parse_cable_active(raw.get("type")),
         identity=_read_identity(path / "identity"),
         raw=raw,
     )
@@ -134,6 +136,7 @@ def _read_plug(port_path: Path) -> TypeCPlug | None:
         name=path.name,
         sysfs_path=str(path),
         identity=_read_identity(path / "identity"),
+        alt_modes=_read_alt_modes(path),
         raw={},
     )
 
@@ -149,23 +152,24 @@ def _first_existing_child(port_path: Path, name: str) -> Path | None:
     return None
 
 
-def _read_alt_modes(path: Path) -> list[str]:
-    modes: list[str] = []
+def _read_alt_modes(path: Path) -> list[TypeCAltMode]:
+    modes: list[TypeCAltMode] = []
     for child in sorted(_safe_iterdir(path)):
         if "-mode" not in child.name and not child.name.startswith(f"{path.name}."):
             continue
-        fields = _read_fields(child, ("description", "mode", "svid", "vdo"))
-        description = fields.get("description")
-        svid = fields.get("svid")
-        mode = fields.get("mode")
-        if description:
-            modes.append(description)
-        elif svid and mode:
-            modes.append(f"SVID {svid}, mode {mode}")
-        elif svid:
-            modes.append(f"SVID {svid}")
-        else:
-            modes.append(child.name)
+        fields = _read_fields(child, ("description", "mode", "svid", "vdo", "active"))
+        modes.append(
+            TypeCAltMode(
+                name=child.name,
+                sysfs_path=str(child),
+                description=fields.get("description") or None,
+                svid=_parse_hex_int(fields.get("svid")),
+                mode=parse_int(fields.get("mode")),
+                vdo=parse_int(fields.get("vdo")),
+                active=_parse_bool(fields.get("active")),
+                raw=fields,
+            )
+        )
     return modes
 
 
@@ -352,3 +356,23 @@ def _parse_bool(value: str | None) -> bool | None:
     if text in {"0", "no", "false", "n"}:
         return False
     return None
+
+
+def _parse_cable_active(value: str | None) -> bool | None:
+    if value is None:
+        return None
+    cable_type = value.strip().lower()
+    if cable_type == "active":
+        return True
+    if cable_type == "passive":
+        return False
+    return None
+
+
+def _parse_hex_int(value: str | None) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value.strip(), 16)
+    except ValueError:
+        return None

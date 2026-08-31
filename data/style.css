@@ -93,6 +93,39 @@
   background: alpha(@theme_fg_color, 0.08);
 }
 
+.compatibility-badge {
+  margin-top: 6px;
+  margin-bottom: 6px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-weight: bold;
+}
+
+.compatibility-supported {
+  color: @success_color;
+  background: alpha(@success_color, 0.12);
+}
+
+.compatibility-unsupported {
+  color: @error_color;
+  background: alpha(@error_color, 0.12);
+}
+
+.compatibility-unknown {
+  color: @warning_color;
+  background: alpha(@warning_color, 0.12);
+}
+
+.power-badge {
+  margin-top: 6px;
+  margin-bottom: 6px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-weight: bold;
+  background: alpha(@accent_color, 0.12);
+  color: @accent_color;
+}
+
 .raw-view {
   padding: 10px;
 }

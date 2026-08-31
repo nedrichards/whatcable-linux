@@ -1,8 +1,10 @@
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from whatcable_linux.altmode import CableAltModeCompatibility, cable_altmode_compatibility
+from whatcable_linux.models import PowerOption
 from whatcable_linux.summary import summarize_port
 from whatcable_linux.sysfs import scan
 
@@ -159,6 +161,31 @@ def test_summary_distinguishes_advertised_mode_from_incompatible_cable(tmp_path:
     assert "Alt mode: DisplayPort (advertised by device; cable compatibility: No)" in summary.bullets
     assert "Cable speed: USB 2.0 (480 Mbps)" in summary.bullets
     assert summary.subtitle == "The device advertises an alternate mode, but the cable is incompatible."
+
+
+def test_summary_surfaces_blocked_altmode_for_power_source(tmp_path: Path) -> None:
+    port = _scan_altmode_fixture(
+        tmp_path,
+        id_header=0x18000001,
+        cable_vdo=0,
+    )
+    port = replace(
+        port,
+        source_capabilities=[
+            PowerOption(
+                voltage_mv=20_000,
+                max_current_ma=3_000,
+                max_power_mw=60_000,
+            )
+        ],
+    )
+
+    summary = summarize_port(port)
+
+    assert summary.headline == "USB-C power source · 60W"
+    assert summary.subtitle == (
+        "Power is available, but the cable blocks an alternate mode advertised by the device."
+    )
 
 
 def test_scan_missing_roots(tmp_path: Path) -> None:

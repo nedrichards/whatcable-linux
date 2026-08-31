@@ -7,7 +7,11 @@ from pathlib import Path
 
 import gi
 
-from .altmode import CableAltModeCompatibility, cable_altmode_compatibility, cable_altmode_explanation
+from .altmode import (
+    CableAltModeCompatibility,
+    cable_altmode_compatibility,
+    cable_altmode_explanation,
+)
 from .chrome_ec import (
     chrome_ec_port_status,
     chrome_ec_port_subtitle,
@@ -15,6 +19,7 @@ from .chrome_ec import (
     is_chrome_ec_port,
 )
 from .naming import usb_class_label
+from .pd import decode_cable_vdo, decode_id_header
 from .report import scan_system
 from .summary import summarize_port
 from .usb_sysfs import is_root_hub, summarize_usb_device, usb_device_bullets, usb_device_name
@@ -211,42 +216,14 @@ class WhatCableApplication(Adw.Application):
         ]
         self.details.append(_metric_grid(metrics))
 
-        facts = Adw.PreferencesGroup(title="Capabilities")
-        facts.add(_row("Port", port.name, icon="input-dialpad-symbolic"))
-        for bullet in summary.bullets:
-            facts.add(_row("Capability", bullet, icon="dialog-information-symbolic"))
-        self.details.append(facts)
-
+        if port.partner and port.partner.alt_modes:
+            self.details.append(_altmode_group(port))
+        if port.source_capabilities:
+            self.details.append(_power_delivery_group(port))
         if port.partner:
-            partner = Adw.PreferencesGroup(title="Partner")
-            partner.add(_row("Name", port.partner.name, icon="computer-symbolic"))
-            if port.partner.supports_usb_power_delivery is not None:
-                partner.add(_row("Power Delivery", "Yes" if port.partner.supports_usb_power_delivery else "No"))
-            for mode in port.partner.alt_modes:
-                compatibility = cable_altmode_compatibility(port, mode)
-                compatibility_label = {
-                    CableAltModeCompatibility.SUPPORTED: "Yes",
-                    CableAltModeCompatibility.UNSUPPORTED: "No",
-                    CableAltModeCompatibility.UNKNOWN: "Unknown",
-                }[compatibility]
-                partner.add(
-                    _row(
-                        mode.label,
-                        f"Device advertises {mode.label}\n"
-                        f"Cable compatibility: {compatibility_label}\n"
-                        f"{cable_altmode_explanation(port, mode, compatibility)}",
-                    )
-                )
-            self.details.append(partner)
-
+            self.details.append(_partner_group(port.partner))
         if port.cable:
-            cable = Adw.PreferencesGroup(title="Cable")
-            cable.add(_row("Name", port.cable.name, icon="drive-removable-media-symbolic"))
-            if port.cable.cable_type:
-                cable.add(_row("Type", port.cable.cable_type.title()))
-            if port.cable.identity:
-                cable.add(_row("Identity", "Exposed by kernel"))
-            self.details.append(cable)
+            self.details.append(_cable_group(port))
 
         if self.show_raw:
             self.details.append(_raw_group(dataclasses.asdict(port)))
@@ -282,9 +259,16 @@ class WhatCableApplication(Adw.Application):
         self.details.append(_metric_grid(metrics))
 
         facts = Adw.PreferencesGroup(title="Details")
-        facts.add(_row("Device", device.name, icon="drive-harddisk-symbolic"))
+        facts.add(_row("Kernel device", device.name, icon="drive-harddisk-symbolic"))
         for bullet in usb_device_bullets(device):
-            facts.add(_row("Property", bullet, icon="dialog-information-symbolic"))
+            label, separator, value = bullet.partition(": ")
+            facts.add(
+                _row(
+                    label if separator else "Detail",
+                    value if separator else bullet,
+                    icon="dialog-information-symbolic",
+                )
+            )
         self.details.append(facts)
 
         if device.interfaces:
@@ -543,6 +527,178 @@ def _metric_grid(metrics: list[tuple[str, str]]) -> Adw.PreferencesGroup:
     for label, value in metrics:
         group.add(_row(label, value))
     return group
+
+
+def _altmode_group(port) -> Adw.PreferencesGroup:
+    group = Adw.PreferencesGroup(
+        title="Alternate Modes",
+        description=(
+            "Advertised by the connected device. The cable verdict says only "
+            "whether the cable prevents the mode."
+        ),
+    )
+    for mode in port.partner.alt_modes:
+        compatibility = cable_altmode_compatibility(port, mode)
+        verdict, css_class, icon_name = _altmode_verdict_presentation(compatibility)
+        row = Adw.ExpanderRow(
+            title=mode.label,
+            subtitle="Advertised by connected device",
+        )
+        icon = Gtk.Image.new_from_icon_name("video-display-symbolic")
+        icon.add_css_class("dim-label")
+        row.add_prefix(icon)
+
+        badge = Gtk.Label(label=verdict)
+        badge.add_css_class("compatibility-badge")
+        badge.add_css_class(css_class)
+        row.add_suffix(badge)
+
+        row.add_row(
+            _row(
+                "Cable verdict",
+                cable_altmode_explanation(port, mode, compatibility),
+                icon=icon_name,
+            )
+        )
+        row.add_row(_row("SVID", f"0x{mode.svid:04x}" if mode.svid is not None else "Not exposed"))
+        row.add_row(_row("Mode index", str(mode.mode) if mode.mode is not None else "Not exposed"))
+        row.add_row(_row("VDO", f"0x{mode.vdo:08x}" if mode.vdo is not None else "Not exposed"))
+        row.add_row(
+            _row(
+                "Mode state",
+                "Active" if mode.active else "Inactive" if mode.active is False else "Not exposed",
+            )
+        )
+        group.add(row)
+    return group
+
+
+def _power_delivery_group(port) -> Adw.PreferencesGroup:
+    best = max(port.source_capabilities, key=lambda option: option.max_power_mw)
+    group = Adw.PreferencesGroup(
+        title="Power Delivery",
+        description=(
+            f"Maximum advertised output: {best.watts_label}. "
+            "The negotiated power may be lower."
+        ),
+    )
+    for option in port.source_capabilities:
+        supply = option.supply_type.replace("_", " ").title()
+        detail = option.volts_label
+        if option.max_current_ma is not None:
+            detail += f" @ {option.amps_label}"
+        row = Adw.ActionRow(title=supply, subtitle=detail)
+        icon = Gtk.Image.new_from_icon_name("battery-level-100-charged-symbolic")
+        icon.add_css_class("dim-label")
+        row.add_prefix(icon)
+        badge = Gtk.Label(label=option.watts_label)
+        badge.add_css_class("power-badge")
+        row.add_suffix(badge)
+        group.add(row)
+    return group
+
+
+def _partner_group(partner) -> Adw.PreferencesGroup:
+    group = Adw.PreferencesGroup(title="Connected Device")
+    group.add(_row("Kernel object", partner.name, icon="computer-symbolic"))
+    if partner.supports_usb_power_delivery is not None:
+        group.add(
+            _row(
+                "Power Delivery",
+                "Advertised" if partner.supports_usb_power_delivery else "Not advertised",
+            )
+        )
+    if partner.accessory_mode:
+        group.add(_row("Accessory mode", partner.accessory_mode))
+    if partner.identity:
+        identity = partner.identity
+        if identity.id_header is not None:
+            header = decode_id_header(identity.id_header)
+            group.add(_row("Product type", header.product_label))
+            group.add(_row("Vendor ID", f"0x{header.vendor_id:04x}"))
+        if identity.product_id is not None:
+            group.add(_row("Product ID", f"0x{identity.product_id:04x}"))
+    return group
+
+
+def _cable_group(port) -> Adw.PreferencesGroup:
+    cable = port.cable
+    group = Adw.PreferencesGroup(
+        title="Cable",
+        description="Identity and ratings reported through the kernel Type-C interface.",
+    )
+    group.add(_row("Kernel object", cable.name, icon="drive-removable-media-symbolic"))
+    if cable.cable_type:
+        group.add(_row("Type", cable.cable_type.title()))
+    if cable.raw.get("plug_type"):
+        group.add(_row("Plug", cable.raw["plug_type"].replace("-", " ").title()))
+
+    identity = cable.identity
+    if identity is None:
+        group.add(_row("E-marker identity", "Not exposed"))
+        return group
+    if identity.id_header == 0:
+        group.add(_row("E-marker identity", "Not present"))
+    elif identity.id_header is not None:
+        header = decode_id_header(identity.id_header)
+        group.add(_row("Identity product type", header.product_label))
+        group.add(_row("Vendor ID", f"0x{header.vendor_id:04x}"))
+    else:
+        group.add(_row("E-marker identity", "Identity object present; ID header unavailable"))
+
+    cable_vdo_raw = _first_cable_vdo(identity)
+    if cable_vdo_raw is not None:
+        cable_vdo = decode_cable_vdo(cable_vdo_raw, active=cable.active is True)
+        group.add(_row("Data capability", cable_vdo.speed_label))
+        group.add(
+            _row(
+                "Power rating",
+                f"{cable_vdo.current_label} at up to {cable_vdo.max_volts}V "
+                f"(~{cable_vdo.max_watts}W)",
+            )
+        )
+    elif identity.raw:
+        group.add(_row("Cable VDO", "Not exposed"))
+    if port.plug:
+        group.add(_row("SOP' alternate modes", str(len(port.plug.alt_modes))))
+    return group
+
+
+def _first_cable_vdo(identity) -> int | None:
+    return next(
+        (
+            value
+            for value in (
+                identity.product_type_vdo1,
+                identity.product_type_vdo2,
+                identity.product_type_vdo3,
+            )
+            if value is not None
+        ),
+        None,
+    )
+
+
+def _altmode_verdict_presentation(
+    compatibility: CableAltModeCompatibility,
+) -> tuple[str, str, str]:
+    return {
+        CableAltModeCompatibility.SUPPORTED: (
+            "Not blocked",
+            "compatibility-supported",
+            "emblem-ok-symbolic",
+        ),
+        CableAltModeCompatibility.UNSUPPORTED: (
+            "Blocked",
+            "compatibility-unsupported",
+            "dialog-error-symbolic",
+        ),
+        CableAltModeCompatibility.UNKNOWN: (
+            "Unknown",
+            "compatibility-unknown",
+            "dialog-question-symbolic",
+        ),
+    }[compatibility]
 
 
 def _ec_port_metrics(device) -> list[tuple[str, str]]:

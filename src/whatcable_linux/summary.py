@@ -16,6 +16,10 @@ def summarize_port(port: TypeCPort) -> PortSummary:
         )
 
     bullets: list[str] = []
+    altmode_compatibilities = [
+        cable_altmode_compatibility(port, altmode)
+        for altmode in port.partner.alt_modes
+    ] if port.partner else []
 
     if port.power_role:
         bullets.append(f"Power role: {port.power_role}")
@@ -82,17 +86,16 @@ def summarize_port(port: TypeCPort) -> PortSummary:
         best = max(port.source_capabilities, key=lambda option: option.max_power_mw)
         headline = f"USB-C power source · {best.watts_label}"
         status = "charging"
-        subtitle = "Power Delivery source capabilities are available."
+        if CableAltModeCompatibility.UNSUPPORTED in altmode_compatibilities:
+            subtitle = "Power is available, but the cable blocks an alternate mode advertised by the device."
+        else:
+            subtitle = "Power Delivery source capabilities are available."
     elif port.partner and port.partner.alt_modes:
         headline = "USB-C alt mode device"
         status = "display"
-        compatibilities = [
-            cable_altmode_compatibility(port, altmode)
-            for altmode in port.partner.alt_modes
-        ]
-        if CableAltModeCompatibility.UNSUPPORTED in compatibilities:
+        if CableAltModeCompatibility.UNSUPPORTED in altmode_compatibilities:
             subtitle = "The device advertises an alternate mode, but the cable is incompatible."
-        elif all(value is CableAltModeCompatibility.SUPPORTED for value in compatibilities):
+        elif all(value is CableAltModeCompatibility.SUPPORTED for value in altmode_compatibilities):
             subtitle = "The device advertises an alternate mode and the cable does not prevent it."
         else:
             subtitle = "The device advertises an alternate mode; cable compatibility is unknown."

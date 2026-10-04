@@ -2,7 +2,7 @@
   "app-id": "com.nedrichards.WhatCable.Devel",
   "desktop-file-name-suffix": " (Development)",
   "runtime": "org.gnome.Platform",
-  "runtime-version": "50",
+  "runtime-version": "51",
   "sdk": "org.gnome.Sdk",
   "command": "whatcable-linux",
   "rename-desktop-file": "com.nedrichards.WhatCable.desktop",

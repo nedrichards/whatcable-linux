@@ -56,7 +56,7 @@ supported on a best-effort basis where they expose compatible sysfs data.
 
 ## Development
 
-WhatCable targets GNOME 50 and is developed Flatpak-first. The development
+WhatCable targets GNOME 51 and is developed Flatpak-first. The development
 manifest uses the local checkout, has a separate application ID, and runs the
 test suite inside the same SDK used to build the app.
 Flatpak Builder renames its desktop file, AppStream metadata, and icon to the
@@ -68,7 +68,7 @@ Install the GNOME runtime, SDK, and Flatpak Builder application if needed:
 
 ```sh
 flatpak install --user flathub \
-  org.gnome.Platform//50 org.gnome.Sdk//50 org.flatpak.Builder
+  org.gnome.Platform//51 org.gnome.Sdk//51 org.flatpak.Builder
 ```
 
 Build, test, install, and run the development app with:
@@ -81,7 +81,7 @@ flatpak run com.nedrichards.WhatCable.Devel
 ```
 
 `run-tests` is enabled in the development manifest, so the build fails if the
-Meson test suite fails in GNOME SDK 50. The Pytest wheels used for that build
+Meson test suite fails in GNOME SDK 51. The Pytest wheels used for that build
 are pinned and test-only; they are removed from the completed app. If a host
 `flatpak-builder` command is preferred, use the same arguments without
 `flatpak run org.flatpak.Builder`.

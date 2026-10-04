@@ -25,7 +25,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Build Flatpak
-        uses: flatpak/flatpak-github-actions/flatpak-builder@v6.7
+        uses: flatpak/flatpak-github-actions/flatpak-builder@v6.8
         with:
           bundle: WhatCable-Devel-${{ github.sha }}-x86_64.flatpak
           manifest-path: build-aux/com.nedrichards.WhatCable.Devel.json

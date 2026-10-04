@@ -1,0 +1,54 @@
+name: Dependency health
+on:
+  schedule:
+    - cron: '23 7 * * 1'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/dependency-health.yml'
+      - 'scripts/ci/dependency-health.py'
+permissions:
+  contents: read
+concurrency:
+  group: dependency-health-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  flatpak:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install Flatpak
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak
+          flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+      - name: Check runtime support and inventory bundled dependencies
+        run: |
+          set -o pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            python3 scripts/ci/dependency-health.py build-aux/com.nedrichards.WhatCable.Devel.json build-aux/stable/com.nedrichards.WhatCable.json --prepare-only 2>&1 | tee dependency-health.log
+          else
+            python3 scripts/ci/dependency-health.py build-aux/com.nedrichards.WhatCable.Devel.json build-aux/stable/com.nedrichards.WhatCable.json 2>&1 | tee dependency-health.log
+          fi
+      - name: Report outdated bundled sources
+        if: ${{ !cancelled() && github.event_name != 'pull_request' && hashFiles('dependency-sources.json') != '' }}
+        run: |
+          set -o pipefail
+          docker run --rm -v "$PWD:/work:ro" ghcr.io/flathub/flatpak-external-data-checker:latest \
+            --check-outdated /work/dependency-sources.json 2>&1 | tee -a dependency-health.log
+      - name: Preserve dependency report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: dependency-health
+          path: dependency-health.log
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Summarize dependency checks
+        if: always()
+        run: |
+          if [ -f dependency-health.log ]; then
+            { echo '### Dependency health'; echo '```text'; cat dependency-health.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          fi

@@ -1,0 +1,132 @@
+name: Publish Release Flatpaks
+run-name: Publish Flatpaks for ${{ inputs.tag }}
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing vX.Y.Z release tag to package
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: release-flatpak-${{ inputs.tag }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    name: Verify release source
+    runs-on: ubuntu-24.04
+    outputs:
+      commit: ${{ steps.release.outputs.commit }}
+      checkout: ${{ steps.release.outputs.checkout }}
+      manifest: ${{ steps.release.outputs.manifest }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify tag and prepare exact release source
+        id: release
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          WORKFLOW_REF: ${{ github.ref }}
+        run: python3 scripts/ci/prepare-release.py build-aux/stable/com.nedrichards.WhatCable.json --test-manifest build-aux/com.nedrichards.WhatCable.Devel.json
+      - name: Preserve verified manifest
+        uses: actions/upload-artifact@v7
+        with:
+          name: verified-release-manifest
+          path: ${{ steps.release.outputs.manifest }}
+          if-no-files-found: error
+          retention-days: 1
+  build:
+    name: Build ${{ matrix.variant.arch }} bundle
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        variant:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.variant.runner }}
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-50
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.verify.outputs.checkout }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v7
+        with:
+          name: verified-release-manifest
+          path: build-aux/stable
+      - name: Build and test release bundle
+        uses: flatpak/flatpak-github-actions/flatpak-builder@v6.8
+        with:
+          arch: ${{ matrix.variant.arch }}
+          bundle: WhatCable-${{ inputs.tag }}-${{ matrix.variant.arch }}.flatpak
+          manifest-path: ${{ needs.verify.outputs.manifest }}
+          cache-key: release-flatpak-${{ needs.verify.outputs.commit }}
+          run-tests: true
+          upload-artifact: false
+      - name: Upload release bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: WhatCable-${{ inputs.tag }}-${{ matrix.variant.arch }}
+          path: WhatCable-${{ inputs.tag }}-${{ matrix.variant.arch }}.flatpak
+          if-no-files-found: error
+          retention-days: 1
+  publish:
+    name: Publish GitHub release
+    needs: [verify, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: WhatCable-${{ inputs.tag }}-*
+          path: dist
+          merge-multiple: true
+      - name: Verify both bundles and create checksums
+        working-directory: dist
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          test -s "WhatCable-${RELEASE_TAG}-x86_64.flatpak"
+          test -s "WhatCable-${RELEASE_TAG}-aarch64.flatpak"
+          sha256sum -- *.flatpak > SHA256SUMS
+      - name: Create draft release with verified assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "A GitHub release already exists for ${RELEASE_TAG}." >&2
+            exit 1
+          fi
+          gh release create "$RELEASE_TAG" dist/*.flatpak dist/SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" --draft --generate-notes \
+            --title "WhatCable ${RELEASE_VERSION}" --verify-tag
+      - name: Publish verified release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+      - name: Summarize release
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_COMMIT: ${{ needs.verify.outputs.commit }}
+        run: |
+          {
+            echo '### Published release'
+            echo "Tag: ${RELEASE_TAG}"
+            echo "Source commit: ${RELEASE_COMMIT}"
+            echo "Release: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG}"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,20 @@
+name: Maintenance checks
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/ci/**'
+      - '.github/workflows/**'
+  pull_request:
+    paths:
+      - 'scripts/ci/**'
+      - '.github/workflows/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  guard-tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - run: python3 -B -m unittest discover -s scripts/ci -p 'test_*.py'

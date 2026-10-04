@@ -152,3 +152,6 @@ See `COPYING` for the full license text.
 
 ---
 *Co-authored with a bunch of different AIs*
+
+Dependency checks, CI artifacts, and release packaging are described in
+[Maintenance](docs/maintenance.md).

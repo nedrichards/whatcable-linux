@@ -78,6 +78,7 @@ class WhatCableApplication(Adw.Application):
             self.window = self._build_window()
             self._watch_sysfs()
         self.window.present()
+        self._ensure_icon_theme()
         self.refresh()
 
     def refresh(self) -> None:
@@ -467,9 +468,23 @@ class WhatCableApplication(Adw.Application):
 
     def _load_css(self) -> None:
         provider = Gtk.CssProvider()
-        css_path = Path("/app/share/whatcable-linux/style.css")
-        if not css_path.exists():
-            css_path = Path(__file__).resolve().parents[2] / "data" / "style.css"
+        candidates = [
+            Path("/app/share/whatcable-linux/style.css"),
+            Path(__file__).resolve().parents[2] / "data" / "style.css",
+        ]
+        # System install: $prefix/share/whatcable-linux/style.css
+        # Walk parents to find install prefix (e.g. /app/share/... for Flatpak
+        # or /nix/store/.../share/... for Nix).
+        for parent in Path(__file__).resolve().parents:
+            candidates.append(parent / "share" / "whatcable-linux" / "style.css")
+        # Also respect XDG_DATA_DIRS.
+        for data_dir in os.environ.get("XDG_DATA_DIRS", "").split(":"):
+            if data_dir:
+                candidates.append(Path(data_dir) / "whatcable-linux" / "style.css")
+
+        css_path = next((p for p in candidates if p.exists()), None)
+        if css_path is None:
+            return
         try:
             provider.load_from_path(str(css_path))
         except GLib.Error:
@@ -482,6 +497,34 @@ class WhatCableApplication(Adw.Application):
             provider,
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
         )
+
+    def _ensure_icon_theme(self) -> None:
+        # Some host icon themes (e.g. Papirus-Dark) lack Adwaita symbolic icons
+        # this app relies on (e.g. drive-removable-media-symbolic). Without a
+        # fallback Gtk.Image widgets appear empty. Detect missing icons and fall
+        # back to Adwaita when available — Adwaita is the GNOME default and is
+        # bundled in the Flatpak runtime and Nix build inputs.
+        try:
+            display = Gdk.Display.get_default()
+            if display is None:
+                return
+            theme = Gtk.IconTheme.get_for_display(display)
+            # Icons used across the app; if any are missing the theme is incomplete
+            required = [
+                "drive-removable-media-symbolic",
+                "drive-harddisk-symbolic",
+                "computer-symbolic",
+                "view-refresh-symbolic",
+                "document-properties-symbolic",
+            ]
+            if all(theme.has_icon(name) for name in required):
+                return
+            settings = Gtk.Settings.get_for_display(display)
+            if settings is not None:
+                settings.set_property("gtk-icon-theme-name", "Adwaita")
+        except Exception:
+            # Missing display or icon theme not ready — ignore, icons will use fallback
+            return
 
 
 def _hero(icon_name: str, status: str, title: str, subtitle: str, chips: list[str]) -> Adw.PreferencesGroup:

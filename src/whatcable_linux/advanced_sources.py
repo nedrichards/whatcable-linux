@@ -11,7 +11,6 @@ ADVANCED_FIELDS = (
     "device_type",
     "generation",
     "iommu_dma_protection",
-    "key",
     "link",
     "maxhopid",
     "nvm_authenticate",

@@ -14,6 +14,12 @@
       It also reports connected USB devices, Thunderbolt and USB4 data exposed
       by the kernel, and the raw sysfs values behind each summary.
     </p>
+    <p>
+      Available details depend on your hardware, firmware, and Linux driver.
+      Cable identity and charging capabilities may not be exposed. Framework
+      Chrome EC power readings are optional and require host device access;
+      other readable device information remains available without it.
+    </p>
   </description>
   <launchable type="desktop-id">com.nedrichards.WhatCable.desktop</launchable>
   <developer id="com.nedrichards">

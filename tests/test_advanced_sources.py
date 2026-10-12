@@ -15,6 +15,7 @@ def test_scan_thunderbolt_fixture(tmp_path: Path) -> None:
     write(thunderbolt / "0-0" / "authorized", "1\n")
     write(thunderbolt / "0-0" / "generation", "4\n")
     write(thunderbolt / "0-0" / "vendor_name", "Intel\n")
+    write(thunderbolt / "0-0" / "key", "private-authorization-key\n")
     write(thunderbolt / "domain0" / "security", "user\n")
     write(thunderbolt / "domain0" / "iommu_dma_protection", "1\n")
 
@@ -22,6 +23,8 @@ def test_scan_thunderbolt_fixture(tmp_path: Path) -> None:
 
     assert len(devices) == 2
     assert devices[0].source == "Thunderbolt"
+    assert "key" not in devices[0].raw
+    assert "key" not in devices[0].properties
     assert devices[0].summary == "Intel · Gen 4, authorized"
     assert devices[1].properties["security"] == "user"
 

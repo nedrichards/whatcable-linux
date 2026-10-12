@@ -4,6 +4,7 @@ import dataclasses
 import json
 import os
 from pathlib import Path
+from threading import Thread
 
 import gi
 
@@ -53,6 +54,11 @@ class WhatCableApplication(Adw.Application):
         self.selected_item = None
         self.monitors: list[Gio.FileMonitor] = []
         self.refresh_source_id: int | None = None
+        self.poll_source_id: int | None = None
+        self.scan_running = False
+        self.scan_pending = False
+        self.stopping = False
+        self.last_report = None
 
     def do_startup(self) -> None:
         Adw.Application.do_startup(self)
@@ -81,7 +87,40 @@ class WhatCableApplication(Adw.Application):
         self.refresh()
 
     def refresh(self) -> None:
-        report = scan_system()
+        if self.stopping:
+            return
+        if self.scan_running:
+            self.scan_pending = True
+            return
+        self.scan_running = True
+        Thread(target=self._scan, daemon=True, name="whatcable-scan").start()
+
+    def _scan(self) -> None:
+        try:
+            report, error = scan_system(), None
+        except Exception as exc:
+            report, error = None, str(exc)
+        GLib.idle_add(self._scan_finished, report, error)
+
+    def _scan_finished(self, report, error) -> bool:
+        self.scan_running = False
+        if self.stopping:
+            return False
+        if error is not None:
+            if self.status_label is not None:
+                self.status_label.set_label("Refresh failed")
+                self.status_label.set_tooltip_text(error)
+            # Allow a successful retry to restore the status, even if unchanged.
+            self.last_report = None
+        elif report != self.last_report:
+            self._apply_report(report)
+            self.last_report = report
+        if self.scan_pending:
+            self.scan_pending = False
+            self.refresh()
+        return False
+
+    def _apply_report(self, report) -> None:
         usb_devices = [device for device in report.usb_devices if not is_root_hub(device)]
         ec_ports = [device for device in report.advanced_devices if is_chrome_ec_port(device)]
         advanced_devices = [
@@ -121,7 +160,7 @@ class WhatCableApplication(Adw.Application):
             self.port_list.append(_section_label("USB-C Ports"))
         for port in report.typec_ports:
             summary = summarize_port(port)
-            row = Adw.ActionRow(title=port.name, subtitle=summary.headline)
+            row = _plain_row(title=port.name, subtitle=summary.headline)
             row.add_prefix(_status_dot(summary.status))
             row.set_activatable(True)
             row.connect("activated", lambda _row, selected=port: self._show_port(selected))
@@ -135,7 +174,7 @@ class WhatCableApplication(Adw.Application):
         if ec_ports:
             self.port_list.append(_section_label("Framework USB-C Ports"))
         for device in ec_ports:
-            row = Adw.ActionRow(
+            row = _plain_row(
                 title=chrome_ec_port_title(device),
                 subtitle=chrome_ec_port_subtitle(device),
             )
@@ -153,7 +192,7 @@ class WhatCableApplication(Adw.Application):
             self.port_list.append(_section_label("USB Devices"))
         for device in usb_devices:
             title = usb_device_name(device)
-            row = Adw.ActionRow(title=title, subtitle=summarize_usb_device(device))
+            row = _plain_row(title=title, subtitle=summarize_usb_device(device))
             row.add_prefix(_status_dot("usb"))
             row.set_activatable(True)
             row.connect("activated", lambda _row, selected=device: self._show_usb_device(selected))
@@ -167,7 +206,7 @@ class WhatCableApplication(Adw.Application):
         if advanced_devices:
             self.port_list.append(_section_label("Advanced Sources"))
         for device in advanced_devices:
-            row = Adw.ActionRow(title=device.name, subtitle=f"{device.source} · {device.summary or device.name}")
+            row = _plain_row(title=device.name, subtitle=f"{device.source} · {device.summary or device.name}")
             row.add_prefix(_status_dot("advanced"))
             row.set_activatable(True)
             row.connect("activated", lambda _row, selected=device: self._show_advanced_device(selected))
@@ -357,7 +396,7 @@ class WhatCableApplication(Adw.Application):
         toolbar = Adw.HeaderBar()
         toolbar.set_title_widget(Adw.WindowTitle(title="Devices", subtitle=""))
         refresh_button = Gtk.Button.new_from_icon_name("view-refresh-symbolic")
-        refresh_button.set_tooltip_text("Refresh")
+        refresh_button.set_tooltip_text("Refresh (Ctrl+R)")
         refresh_button.set_action_name("app.refresh")
         toolbar.pack_start(refresh_button)
 
@@ -385,7 +424,7 @@ class WhatCableApplication(Adw.Application):
         content_toolbar.set_title_widget(Adw.WindowTitle(title="WhatCable", subtitle=""))
         self.raw_button = Gtk.ToggleButton()
         self.raw_button.set_icon_name("document-properties-symbolic")
-        self.raw_button.set_tooltip_text("Show raw sysfs")
+        self.raw_button.set_tooltip_text("Show raw sysfs (Ctrl+I)")
         self.raw_button.set_action_name("app.raw")
         content_toolbar.pack_end(self.raw_button)
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
@@ -439,7 +478,18 @@ class WhatCableApplication(Adw.Application):
             monitor.connect("changed", self._sysfs_changed)
             self.monitors.append(monitor)
 
-        GLib.timeout_add_seconds(5, self._poll_sysfs)
+        self.poll_source_id = GLib.timeout_add_seconds(5, self._poll_sysfs)
+
+    def do_shutdown(self) -> None:
+        self.stopping = True
+        for source_id in (self.refresh_source_id, self.poll_source_id):
+            if source_id is not None:
+                GLib.source_remove(source_id)
+        self.refresh_source_id = self.poll_source_id = None
+        for monitor in self.monitors:
+            monitor.cancel()
+        self.monitors.clear()
+        Adw.Application.do_shutdown(self)
 
     def _sysfs_changed(self, *_args) -> None:
         self._schedule_refresh()
@@ -449,7 +499,7 @@ class WhatCableApplication(Adw.Application):
         return True
 
     def _schedule_refresh(self) -> None:
-        if self.refresh_source_id is not None:
+        if self.stopping or self.refresh_source_id is not None:
             return
         self.refresh_source_id = GLib.timeout_add(350, self._run_scheduled_refresh)
 
@@ -587,7 +637,7 @@ def _power_delivery_group(port) -> Adw.PreferencesGroup:
         detail = option.volts_label
         if option.max_current_ma is not None:
             detail += f" @ {option.amps_label}"
-        row = Adw.ActionRow(title=supply, subtitle=detail)
+        row = _plain_row(title=supply, subtitle=detail)
         icon = Gtk.Image.new_from_icon_name("battery-level-100-charged-symbolic")
         icon.add_css_class("dim-label")
         row.add_prefix(icon)
@@ -737,8 +787,16 @@ def _raw_group(payload: dict) -> Adw.PreferencesGroup:
     return raw_group
 
 
+def _plain_row(title: str, subtitle: str) -> Adw.ActionRow:
+    row = Adw.ActionRow()
+    row.set_use_markup(False)
+    row.set_title(title)
+    row.set_subtitle(subtitle)
+    return row
+
+
 def _row(title: str, value: str, icon: str | None = None) -> Adw.ActionRow:
-    row = Adw.ActionRow(title=title, subtitle=value)
+    row = _plain_row(title=title, subtitle=value)
     row.set_subtitle_lines(4)
     if icon:
         image = Gtk.Image.new_from_icon_name(icon)

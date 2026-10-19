@@ -34,14 +34,12 @@ The development Flatpak is authoritative for GTK, SDK, packaging, and runtime
 changes:
 
 ```sh
-flatpak run org.flatpak.Builder --user --install --force-clean \
-  --disable-rofiles-fuse build-flatpak-devel \
-  build-aux/com.nedrichards.WhatCable.Devel.json
+./scripts/local-flatpak.sh
 flatpak run com.nedrichards.WhatCable.Devel
 ```
 
 `run-tests` is enabled in the development manifest. A successful build proves
-the Meson unit suite inside GNOME SDK 50. Host checks remain useful for quick
+the Meson unit suite inside the manifest-pinned GNOME SDK. Host checks remain useful for quick
 iteration:
 
 ```sh
@@ -67,3 +65,32 @@ working on local source.
   behaviour-based commits and only commit, push, or publish when requested.
 - Report the checks actually run and any hardware-dependent verification that
   remains.
+
+## Local Flatpak build storage
+
+Use `./scripts/local-flatpak.sh` (defaults to development) for local checkout
+builds and updates. Use `./scripts/local-flatpak.sh production` only when the
+production manifest is intended. See `docs/local-flatpak.md`.
+Use the normal manifests and keep their test gates enabled.
+
+- Keep the durable update repository at `flatpak-repo/`. Never place it under
+  `.flatpak-builder/` or another disposable build/cache directory.
+- Use `.flatpak-builder/` for Builder state and `.flatpak-builder/staging` as
+  the single staging location for both profiles. Build sequentially. Do not
+  create per-task, per-validation or timestamped build/state/repository trees.
+- Use `--delete-build-dirs` and clean module working directories and staging
+  after success, failure and ordinary interruption, as the script does. Keep
+  the reusable cache and downloads. Do not use `--keep-build-dirs` for routine
+  automated builds. Debug retention needs an explicit task-specific reason
+  and cleanup when finished.
+- Do not run GNOME Builder or raw Builder commands concurrently with the
+  script. Interactive GNOME Builder development remains supported via the
+  `.Devel` manifest; prefer the script for automated validation and deployment.
+- Keep directory-source `skip` lists excluding generated build directories,
+  `target`, `.flatpak-builder*` and `flatpak-repo`, so artifacts are not copied
+  into subsequent builds.
+- Verify the installed app and its update origin after deployment. Never
+  re-export an installed `export/` directory.
+
+There is no enforced storage budget. Do not change Rust incremental/debug
+settings as part of storage housekeeping without a separate request.

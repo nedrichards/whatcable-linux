@@ -34,8 +34,8 @@
         },
         {
           "type": "file",
-          "url": "https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl",
-          "sha256": "e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746",
+          "url": "https://files.pythonhosted.org/packages/40/9e/2b38731e0fc536806f16490e1a12d7f0dc2a1235aa8cc07bcc75416a7daa/pluggy-1.7.0-py3-none-any.whl",
+          "sha256": " 7dd7b0d8832ba3cb632c306926ded123429211b83641b35dc5c41ad2d34f9bec",
           "x-checker-data": {"type": "pypi", "name": "pluggy", "packagetype": "bdist_wheel"}
         },
         {
@@ -58,7 +58,37 @@
       "sources": [
         {
           "type": "dir",
-          "path": ".."
+          "path": "..",
+          "skip": [
+            ".git",
+            ".flatpak-builder*",
+            "flatpak-repo",
+            "build",
+            "build-dir",
+            "build-flatpak",
+            "build-flatpak*",
+            "build-flatpak-devel",
+            "build-flatpak-stable",
+            "_build*",
+            "flatpak-build*",
+            "repo",
+            "target",
+            ".venv",
+            "venv",
+            "__pycache__",
+            ".pytest_cache",
+            ".ruff_cache",
+            ".agents",
+            ".codex",
+            ".aws",
+            ".idea",
+            ".vscode",
+            ".env",
+            ".env.*",
+            "*.flatpak",
+            "*.syscap",
+            "*.log"
+          ]
         }
       ]
     }

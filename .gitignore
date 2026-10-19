@@ -15,3 +15,6 @@ __pycache__/
 
 /.agents/
 /.codex/
+
+# Durable local Flatpak update repository (keep when cleaning build state)
+/flatpak-repo/

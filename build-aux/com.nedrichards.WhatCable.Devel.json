@@ -35,7 +35,7 @@
         {
           "type": "file",
           "url": "https://files.pythonhosted.org/packages/40/9e/2b38731e0fc536806f16490e1a12d7f0dc2a1235aa8cc07bcc75416a7daa/pluggy-1.7.0-py3-none-any.whl",
-          "sha256": " 7dd7b0d8832ba3cb632c306926ded123429211b83641b35dc5c41ad2d34f9bec",
+          "sha256": "7dd7b0d8832ba3cb632c306926ded123429211b83641b35dc5c41ad2d34f9bec",
           "x-checker-data": {"type": "pypi", "name": "pluggy", "packagetype": "bdist_wheel"}
         },
         {

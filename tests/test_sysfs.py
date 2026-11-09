@@ -91,6 +91,9 @@ def _scan_altmode_fixture(
         )
     if plug_altmode:
         _write_altmode(typec, "port0-plug0")
+        (typec / "port0" / "port0-plug0").rename(
+            typec / "port0" / "port0-cable" / "port0-plug0"
+        )
     return scan(typec, tmp_path / "missing-pd")[0]
 
 

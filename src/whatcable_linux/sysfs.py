@@ -128,7 +128,10 @@ def _read_cable(port_path: Path) -> TypeCCable | None:
 
 
 def _read_plug(port_path: Path) -> TypeCPlug | None:
-    path = _first_existing_child(port_path, f"{port_path.name}-plug0")
+    cable = _first_existing_child(port_path, f"{port_path.name}-cable")
+    path = _first_existing_child(cable, f"{port_path.name}-plug0") if cable else None
+    if path is None:
+        path = _first_existing_child(port_path, f"{port_path.name}-plug0")
     if path is None:
         return None
 

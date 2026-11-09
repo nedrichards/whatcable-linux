@@ -8,6 +8,7 @@ import re
 import shutil
 import subprocess
 from pathlib import Path
+from urllib.request import urlopen
 
 FLATPAK = shutil.which("flatpak") or "/usr/bin/flatpak"
 
@@ -24,11 +25,52 @@ def modules(items, parent):
             yield from modules(item.get("modules", []), parent)
 
 
+def synchronize(manifest, requirements, fetch):
+    pins = re.findall(r"^pytest==([0-9]+(?:\.[0-9]+)*)$", requirements, re.MULTILINE)
+    if len(pins) != 1:
+        raise ValueError("Expected exactly one numeric pytest pin")
+    version = pins[0]
+    metadata = fetch(f"https://pypi.org/pypi/pytest/{version}/json")
+    wheels = [f for f in metadata["urls"]
+              if f["filename"] == f"pytest-{version}-py3-none-any.whl" and not f.get("yanked")]
+    if len(wheels) != 1:
+        raise ValueError("Expected one universal pytest wheel")
+    wheel = wheels[0]
+    if not wheel["url"].startswith("https://files.pythonhosted.org/"):
+        raise ValueError("Unexpected wheel host")
+    module = next(m for m in manifest["modules"] if m["name"] == "python3-pytest")
+    module["build-commands"] = [
+        re.sub(r"pytest==[0-9.]+", f"pytest=={version}", command)
+        for command in module["build-commands"]
+    ]
+    source = next(s for s in module["sources"] if s.get("x-checker-data", {}).get("name") == "pytest")
+    source.update(url=wheel["url"], sha256=wheel["digests"]["sha256"])
+    return manifest
+
+
+def fetch(url):
+    with urlopen(url, timeout=30) as response:
+        return json.load(response)
+
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("manifests", nargs="+")
     parser.add_argument("--prepare-only", action="store_true")
+    parser.add_argument("--sync-pytest", type=Path, metavar="REQUIREMENTS")
     args = parser.parse_args()
+    if args.sync_pytest:
+        if len(args.manifests) != 1:
+            parser.error("--sync-pytest requires one development manifest")
+        path = Path(args.manifests[0])
+        if path.name != "com.nedrichards.WhatCable.Devel.json":
+            parser.error("--sync-pytest only supports the development manifest")
+        original = path.read_text()
+        updated = synchronize(json.loads(original), args.sync_pytest.read_text(), fetch)
+        if json.loads(original) != updated:
+            path.write_text(json.dumps(updated, indent=2) + "\n")
+        return 0
     failed = False
     seen = set()
     external = []

@@ -152,5 +152,22 @@ class ReleaseTests(unittest.TestCase):
             self.prepare()
 
 
+class PytestSyncTests(unittest.TestCase):
+    def test_sync_changes_only_pytest_and_is_idempotent(self):
+        sync = health
+        manifest = json.loads((HERE.parent.parent / "build-aux/com.nedrichards.WhatCable.Devel.json").read_text())
+        original = json.loads(json.dumps(manifest))
+        wheel = {"filename": "pytest-99.0.0-py3-none-any.whl",
+                 "url": "https://files.pythonhosted.org/pytest.whl",
+                 "digests": {"sha256": "a" * 64}}
+        fetch = lambda url: {"urls": [wheel]}
+        result = sync.synchronize(manifest, "pytest==99.0.0\nruff==1.0", fetch)
+        self.assertEqual(result["modules"][1:], original["modules"][1:])
+        self.assertEqual(result["modules"][0]["sources"][:-1], original["modules"][0]["sources"][:-1])
+        self.assertEqual(result, sync.synchronize(result, "pytest==99.0.0", fetch))
+        with self.assertRaises(ValueError):
+            sync.synchronize(manifest, "pytest @ https://example.org", fetch)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -20,7 +20,7 @@
       "name": "python3-pytest",
       "buildsystem": "simple",
       "build-commands": [
-        "pip3 install --verbose --no-index --find-links=\"file://${PWD}\" --prefix=${FLATPAK_DEST} \"pytest==9.1.1\" --no-build-isolation"
+        "pip3 install --verbose --no-index --find-links=\"file://${PWD}\" --prefix=${FLATPAK_DEST} \"pytest==9.2.0\" --no-build-isolation"
       ],
       "cleanup": [
         "*"
@@ -40,8 +40,8 @@
         },
         {
           "type": "file",
-          "url": "https://files.pythonhosted.org/packages/24/25/1de2678b631f5a49215c6c96fff41ba892b0a34df68d6d80292b1b48aa7f/pytest-9.1.1-py3-none-any.whl",
-          "sha256": "37a86b45efb9a47a61a36449063e8e18d0cab3161329fc099eb21783169c4f0c",
+          "url": "https://files.pythonhosted.org/packages/51/39/1f5d8c8877a0fa327db959c19341d4be61660de1ab6b7391f9eb805bcd67/pytest-9.2.0-py3-none-any.whl",
+          "sha256": "07acdcf88ec174f907dc01af70bf52d49b014bbab03faeeade31c96b18c2e588",
           "x-checker-data": {"type": "pypi", "name": "pytest", "packagetype": "bdist_wheel"}
         }
       ]

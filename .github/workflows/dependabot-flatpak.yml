@@ -1,0 +1,67 @@
+name: Dependabot Flatpak pytest
+
+on:
+  workflow_run:
+    workflows: [Source quality]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependabot-flatpak-pytest-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: true
+
+jobs:
+  regenerate:
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.actor.login == 'dependabot[bot]' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      startsWith(github.event.workflow_run.head_branch, 'dependabot/pip/')
+    permissions:
+      actions: write
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out trusted generator
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.repository.default_branch }}
+          persist-credentials: false
+          path: trusted
+
+      - name: Check out Dependabot update
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          path: update
+
+      - name: Synchronize Flatpak pytest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          python3 trusted/scripts/ci/dependency-health.py \
+            update/build-aux/com.nedrichards.WhatCable.Devel.json \
+            --sync-pytest update/requirements-dev.txt
+
+          if git -C update diff --quiet -- build-aux/com.nedrichards.WhatCable.Devel.json; then
+            exit 0
+          fi
+
+          git -C update diff --check
+          git -C update config user.name 'github-actions[bot]'
+          git -C update config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git -C update add -- build-aux/com.nedrichards.WhatCable.Devel.json
+          git -C update commit -m 'chore(deps): synchronize Flatpak pytest'
+          git -C update push origin "HEAD:${TARGET_BRANCH}"
+
+      - name: Validate repaired Dependabot branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          gh workflow run flatpak.yml --repo "$GITHUB_REPOSITORY" --ref "${TARGET_BRANCH}"
+          gh workflow run source.yml --repo "$GITHUB_REPOSITORY" --ref "${TARGET_BRANCH}"

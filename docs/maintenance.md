@@ -13,3 +13,12 @@ GitHub bundles are sideloadable packages. Flathub updates continue through the F
 The temporary release build includes the development manifest's cleanup-only pytest module. It runs the tagged production source tests and removes test tooling from the final bundle. The committed stable source pin remains unchanged.
 
 GitHub repository settings also enable dependency vulnerability alerts, Dependabot security updates, and weekly CodeQL default setup. Security updates propose pull requests; they do not merge them or publish app releases. The default CodeQL configuration lives in GitHub settings, alongside these versioned maintenance workflows.
+
+Dependabot pip updates also synchronize the development Flatpak's pytest pin.
+After a successful Dependabot Source quality run, the privileged follow-up uses
+the default branch generator and reads only the numeric pytest pin from the
+update. It commits only the development manifest and dispatches Source quality
+and Flatpak Build explicitly (bot pushes do not trigger normal push workflows).
+The stable release manifest is excluded. To synchronize manually, run
+`python3 scripts/ci/dependency-health.py build-aux/com.nedrichards.WhatCable.Devel.json --sync-pytest requirements-dev.txt`. Transitive pytest wheels remain
+covered by the weekly dependency report.

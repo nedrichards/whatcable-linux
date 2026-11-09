@@ -21,6 +21,8 @@ python.install_sources(
     'src/whatcable_linux/naming.py',
     'src/whatcable_linux/pd.py',
     'src/whatcable_linux/report.py',
+    'src/whatcable_linux/ucsi.py',
+    'src/whatcable_linux/usb4_debug.py',
     'src/whatcable_linux/summary.py',
     'src/whatcable_linux/sysfs.py',
     'src/whatcable_linux/usb_sysfs.py',

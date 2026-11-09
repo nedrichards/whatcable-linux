@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .models import AdvancedDevice
+from .models import AdvancedDevice, NegotiatedLink
 
 ADVANCED_FIELDS = (
     "authorized",
@@ -57,10 +57,16 @@ def _scan_bus(source: str, root: Path) -> list[AdvancedDevice]:
         if "authorized" in raw:
             summary_bits.append("authorized" if raw["authorized"] == "1" else "not authorized")
         if "tx_speed" in raw or "rx_speed" in raw:
-            summary_bits.append(f"TX {raw.get('tx_speed', '?')} / RX {raw.get('rx_speed', '?')}")
+            summary_bits.append(f"Negotiated TX {raw.get('tx_speed', '?')} / RX {raw.get('rx_speed', '?')}")
+
+        if "tx_lanes" in raw or "rx_lanes" in raw:
+            summary_bits.append(f"Lanes TX {raw.get('tx_lanes', '?')} / RX {raw.get('rx_lanes', '?')}")
 
         devices.append(
             AdvancedDevice(
+                negotiated_link=NegotiatedLink(
+                    **{key: raw.get(key) for key in ("tx_speed", "rx_speed", "tx_lanes", "rx_lanes")}
+                ) if any(key in raw for key in ("tx_speed", "rx_speed", "tx_lanes", "rx_lanes")) else None,
                 source=source,
                 name=path.name,
                 sysfs_path=str(real),

@@ -24,6 +24,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--debug-usb-devices", default="/sys/kernel/debug/usb/devices", help=argparse.SUPPRESS)
     parser.add_argument("--chrome-ec-root", default="/sys/class/chromeos/cros_ec", help=argparse.SUPPRESS)
     parser.add_argument("--chrome-ec-device", default="/dev/cros_ec", help=argparse.SUPPRESS)
+    parser.add_argument("--usb4-debug", action="store_true", help="read optional USB4 debugfs counter snapshots")
     parser.add_argument("--version", action="version", version=f"whatcable-linux {__version__}")
     parser.add_argument("--gui", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
@@ -42,6 +43,7 @@ def main(argv: list[str] | None = None) -> int:
         args.debug_usb_devices,
         args.chrome_ec_root,
         args.chrome_ec_device,
+        usb4_debug=args.usb4_debug,
     )
     usb_devices = report.usb_devices if args.raw else [
         device for device in report.usb_devices if not is_root_hub(device)

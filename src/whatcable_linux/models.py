@@ -192,3 +192,13 @@ class AdvancedDevice:
     summary: str | None = None
     properties: dict[str, str] = field(default_factory=dict)
     raw: dict[str, str] = field(default_factory=dict)
+    negotiated_link: NegotiatedLink | None = None
+
+
+@dataclass(frozen=True)
+class NegotiatedLink:
+    tx_speed: str | None = None
+    rx_speed: str | None = None
+    tx_lanes: str | None = None
+    rx_lanes: str | None = None
+    usb_devices: list[str] = field(default_factory=list)

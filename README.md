@@ -155,3 +155,21 @@ See `COPYING` for the full license text.
 
 Dependency checks, CI artifacts, and release packaging are described in
 [Maintenance](docs/maintenance.md).
+
+UCSI diagnostics identify standard ACPI `USBC000` controllers, driver bindings,
+port registration and partner identity availability. A bound controller with no
+ports is reported explicitly: sysfs alone cannot establish an initialisation
+failure. Identity availability does not prove every Type-C function is working.
+Non-ACPI UCSI transports are outside this diagnostic's scope.
+
+Thunderbolt/USB4 negotiated TX/RX speeds and lane counts are included as
+`negotiated_link` fields in JSON. USB devices are associated only when an explicit
+`usb4_port` sysfs link identifies the router; absent links remain unassociated.
+These observations describe device negotiation, not cable-advertised capability.
+
+Use `--json --usb4-debug` for an optional read-only snapshot of exposed USB4
+adapter `counters` files under `/sys/kernel/debug/thunderbolt`. This provider is
+separate from ordinary scanning and reports unavailable or inaccessible data.
+It preserves the kernel's counter format without interpreting it as an error
+rate, never clears counters, and never reads or runs margining controls. Normal
+Flatpak permissions may leave debugfs unavailable; no elevated access is requested.

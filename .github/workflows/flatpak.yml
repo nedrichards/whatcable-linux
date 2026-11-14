@@ -122,6 +122,7 @@ jobs:
         with:
           name: installed-review-${{ matrix.arch }}-${{ github.sha }}
           path: .ci-results/
+          include-hidden-files: true
           if-no-files-found: warn
           retention-days: 14
     timeout-minutes: 60

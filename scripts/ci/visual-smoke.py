@@ -66,7 +66,11 @@ def main():
     if os.getenv("ADW_DEBUG_HIGH_CONTRAST") == "1" and not manager.get_high_contrast():
         raise RuntimeError("Requested high contrast is not active")
     errors = []
-    sys.excepthook = lambda *error: errors.append(error)
+    def record_error(*error):
+        errors.append(error)
+        sys.__excepthook__(*error)
+
+    sys.excepthook = record_error
     with ExitStack() as stack:
         app, window, ready = create(stack)
         try:

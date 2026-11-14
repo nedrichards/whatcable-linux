@@ -19,3 +19,8 @@ Workflow syntax and shell snippets are checked locally before publication. Hoste
 execution provides the architecture and installed-artifact evidence; generated
 captures still require human visual review. No release or tag is created by this
 maintenance change.
+
+Fixture capture waits for three stable native frame allocations and a renderable
+node. Logs record requested and allocated widths; a widget minimum may prevent
+the requested compact width. Captures provide review evidence, while the existing
+regression suite remains the behavioral gate.

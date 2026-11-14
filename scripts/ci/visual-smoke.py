@@ -52,6 +52,33 @@ def create(stack):
     return app, app.window, lambda: not app.scan_running and app.last_report == report
 
 
+
+def capture_node(window):
+    nodes = []
+    allocations = []
+    frames = []
+
+    def rendered():
+        frame = window.get_frame_clock().get_frame_counter()
+        if not frames or frame != frames[-1]:
+            frames.append(frame)
+            allocations.append((window.get_width(), window.get_height()))
+        if len(allocations) < 3 or len(set(allocations[-3:])) != 1:
+            window.queue_draw()
+            return False
+        snapshot = Gtk.Snapshot.new()
+        Gtk.WidgetPaintable.new(window).snapshot(snapshot, window.get_width(), window.get_height())
+        node = snapshot.to_node()
+        if node is None:
+            window.queue_draw()
+            return False
+        nodes.append(node)
+        return True
+
+    pump(rendered)
+    return nodes[0]
+
+
 def main():
     output = Path(sys.argv[1])
     output.mkdir(parents=True, exist_ok=True)
@@ -86,16 +113,12 @@ def main():
                     pump(lambda clock=clock, frame=frame: clock.get_frame_counter() > frame)
                     if errors:
                         raise RuntimeError(f"Native callback failed: {errors}")
-                    snapshot = Gtk.Snapshot.new()
-                    Gtk.WidgetPaintable.new(window).snapshot(snapshot, window.get_width(), window.get_height())
-                    node = snapshot.to_node()
-                    if node is None:
-                        raise RuntimeError("Mapped native window produced no render node")
+                    node = capture_node(window)
                     texture = window.get_renderer().render_texture(node, None)
                     target = output / f"window-{width}-{label}.png"
                     if not texture.save_to_png(str(target)):
                         raise RuntimeError("Could not save native fixture capture")
-                    print(f"CAPTURE_PASS: {target.name} {window.get_width()}x{window.get_height()}", flush=True)
+                    print(f"CAPTURE_PASS: {target.name} requested={width} allocated={window.get_width()}x{window.get_height()}", flush=True)
         finally:
             window.destroy()
             app.quit()

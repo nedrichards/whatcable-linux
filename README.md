@@ -173,3 +173,5 @@ separate from ordinary scanning and reports unavailable or inaccessible data.
 It preserves the kernel's counter format without interpreting it as an error
 rate, never clears counters, and never reads or runs margining controls. Normal
 Flatpak permissions may leave debugfs unavailable; no elevated access is requested.
+
+For hosted checks and artifacts, see [continuous integration](docs/CI.md).

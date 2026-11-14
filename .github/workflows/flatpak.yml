@@ -6,9 +6,11 @@ permissions:
 on:
   workflow_dispatch:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
+  schedule:
+    - cron: 11 6 * * 3
 
 concurrency:
   group: flatpak-${{ github.ref }}
@@ -17,29 +19,73 @@ concurrency:
 jobs:
   flatpak:
     name: "Build Flatpak"
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     container:
-      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-51
-      options: --privileged
+      image:
+        ghcr.io/flathub-infra/flatpak-github-actions:gnome-51@sha256:78d969b18225ae107ca29497bf09c4a3f791e5f1838a9a912a529d0024fb6210
+      options: --privileged --volume /var/lib/flatpak
     steps:
-      - uses: actions/checkout@v7
-
-      - name: Build Flatpak
-        uses: flatpak/flatpak-github-actions/flatpak-builder@v6.8
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
-          bundle: WhatCable-Devel-${{ github.sha }}-x86_64.flatpak
+          persist-credentials: false
+      - name: Prepare isolated native session
+        run: |
+          set -o pipefail
+          mkdir -p .ci-results "$XDG_RUNTIME_DIR"
+          chmod 700 "$XDG_RUNTIME_DIR"
+          if [[ ! -e /usr/bin/dbus-daemon ]]; then
+            ln -s "$(command -v dbus-daemon)" /usr/bin/dbus-daemon
+          fi
+          mkdir -p /app/var/lib/dbus /var/lib/dbus
+          dbus-uuidgen --ensure=/app/var/lib/dbus/machine-id
+          cp /app/var/lib/dbus/machine-id /var/lib/dbus/machine-id
+          cp /app/var/lib/dbus/machine-id /etc/machine-id
+          mkdir -p /app/share/dbus-1/services
+          cat > /app/share/dbus-1/services/org.freedesktop.portal.Flatpak.service <<'SERVICE'
+          [D-BUS Service]
+          Name=org.freedesktop.portal.Flatpak
+          Exec=/app/libexec/flatpak-portal --no-idle-exit
+          SERVICE
+          bash scripts/ci/display-tools.sh 2>&1 | tee .ci-results/display-tools.log
+      - name: Build Flatpak
+        uses: flatpak/flatpak-github-actions/flatpak-builder@79327416609af08178ad73b352877e51450790b3  # v6.8
+        with:
+          bundle: WhatCable-Devel-${{ github.sha }}-${{ matrix.arch }}.flatpak
           manifest-path: build-aux/com.nedrichards.WhatCable.Devel.json
           cache-key: flatpak-builder-${{ github.sha }}
           run-tests: true
           keep-build-dirs: true
           upload-artifact: false
 
+          arch: ${{ matrix.arch }}
+      - name: Install and validate exported bundle
+        id: installed
+        env:
+          BUNDLE: WhatCable-Devel-${{ github.sha }}-${{ matrix.arch }}.flatpak
+        run: |
+          set -o pipefail
+          flatpak install --user --reinstall --noninteractive "$PWD/$BUNDLE"
+          test "$(uname -m)" = "$BUILD_ARCH"
+          ref=$(flatpak info --user --show-ref "$APP_ID")
+          [[ "$ref" == "app/$APP_ID/$BUILD_ARCH/"* ]]
+          dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1200x24' bash scripts/ci/session.sh bash scripts/ci/installed-validation.sh 2>&1 | tee .ci-results/installed.log
+      - name: Record validated source and bundle checksums
+        env:
+          BUNDLE: WhatCable-Devel-${{ github.sha }}-${{ matrix.arch }}.flatpak
+        run: |
+          {
+            printf 'Built checkout: %s\nArchitecture: %s\n' "$GITHUB_SHA" "$BUILD_ARCH"
+            flatpak info --user --show-commit "$APP_ID"
+            flatpak info --show-commit org.gnome.Platform//51
+            flatpak info --show-commit org.gnome.Sdk//51
+          } > ".ci-results/BUILD_INFO-$BUILD_ARCH.txt"
+          sha256sum -- "$BUNDLE" > ".ci-results/SHA256SUMS-$BUILD_ARCH"
       - name: Upload development bundle
         id: upload
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7
         with:
-          name: WhatCable-Devel-${{ github.sha }}-x86_64
-          path: WhatCable-Devel-${{ github.sha }}-x86_64.flatpak
+          name: WhatCable-Devel-${{ github.sha }}-${{ matrix.arch }}
+          path: WhatCable-Devel-${{ github.sha }}-${{ matrix.arch }}.flatpak
           if-no-files-found: error
           retention-days: 14
       - name: Summarize development bundle
@@ -55,14 +101,42 @@ jobs:
             echo 'Retention: 14 days'
             echo 'Install after extracting the artifact:'
             echo '```console'
-            echo "flatpak install --user ./WhatCable-Devel-${GITHUB_SHA}-x86_64.flatpak"
+            echo "flatpak install --user ./WhatCable-Devel-${GITHUB_SHA}-${{ matrix.arch }}.flatpak"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Preserve Flatpak test logs
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7
         with:
-          name: flatpak-test-logs-${{ github.sha }}
+          name: flatpak-test-logs-${{ github.sha }}-${{ matrix.arch }}
           path: .flatpak-builder/build/**/meson-logs/testlog.*
           if-no-files-found: warn
           retention-days: 14
+          include-hidden-files: true
+      - name: Build visual review index
+        if: always()
+        run: python3 scripts/ci/visual-report.py
+      - name: Preserve installed diagnostics and fixture review
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: installed-review-${{ matrix.arch }}-${{ github.sha }}
+          path: .ci-results/
+          if-no-files-found: warn
+          retention-days: 14
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    defaults:
+      run:
+        shell: bash
+    env:
+      BUILD_ARCH: ${{ matrix.arch }}
+      APP_ID: com.nedrichards.WhatCable.Devel
+      XDG_RUNTIME_DIR: /run/user/0

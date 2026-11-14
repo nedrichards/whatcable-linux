@@ -18,3 +18,7 @@ __pycache__/
 
 # Durable local Flatpak update repository (keep when cleaning build state)
 /flatpak-repo/
+
+/.ci-results/
+
+/build-ci/

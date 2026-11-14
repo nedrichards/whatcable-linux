@@ -1,5 +1,5 @@
-name: Publish Release Flatpaks
-run-name: Publish Flatpaks for ${{ inputs.tag }}
+name: Prepare Release Flatpaks
+run-name: Prepare Flatpaks for ${{ inputs.tag }}
 on:
   workflow_dispatch:
     inputs:
@@ -22,7 +22,7 @@ jobs:
       manifest: ${{ steps.release.outputs.manifest }}
       version: ${{ steps.release.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           fetch-depth: 0
           ref: ${{ github.sha }}
@@ -33,14 +33,16 @@ jobs:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           RELEASE_TAG: ${{ inputs.tag }}
           WORKFLOW_REF: ${{ github.ref }}
-        run: python3 scripts/ci/prepare-release.py build-aux/stable/com.nedrichards.WhatCable.json --test-manifest build-aux/com.nedrichards.WhatCable.Devel.json
+        run: python3 scripts/ci/prepare-release.py build-aux/stable/com.nedrichards.WhatCable.json --test-manifest
+          build-aux/com.nedrichards.WhatCable.Devel.json
       - name: Preserve verified manifest
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7
         with:
           name: verified-release-manifest
           path: ${{ steps.release.outputs.manifest }}
           if-no-files-found: error
           retention-days: 1
+    timeout-minutes: 30
   build:
     name: Build ${{ matrix.variant.arch }} bundle
     needs: verify
@@ -54,19 +56,20 @@ jobs:
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.variant.runner }}
     container:
-      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-50
-      options: --privileged
+      image:
+        ghcr.io/flathub-infra/flatpak-github-actions:gnome-51@sha256:78d969b18225ae107ca29497bf09c4a3f791e5f1838a9a912a529d0024fb6210
+      options: --privileged --volume /var/lib/flatpak
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           ref: ${{ needs.verify.outputs.checkout }}
           persist-credentials: false
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8
         with:
           name: verified-release-manifest
           path: build-aux/stable
       - name: Build and test release bundle
-        uses: flatpak/flatpak-github-actions/flatpak-builder@v6.8
+        uses: flatpak/flatpak-github-actions/flatpak-builder@79327416609af08178ad73b352877e51450790b3  # v6.8
         with:
           arch: ${{ matrix.variant.arch }}
           bundle: WhatCable-${{ inputs.tag }}-${{ matrix.variant.arch }}.flatpak
@@ -75,20 +78,26 @@ jobs:
           run-tests: true
           upload-artifact: false
       - name: Upload release bundle
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7
         with:
           name: WhatCable-${{ inputs.tag }}-${{ matrix.variant.arch }}
           path: WhatCable-${{ inputs.tag }}-${{ matrix.variant.arch }}.flatpak
           if-no-files-found: error
           retention-days: 1
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
   publish:
-    name: Publish GitHub release
+    name: Prepare draft release
     needs: [verify, build]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8
         with:
           pattern: WhatCable-${{ inputs.tag }}-*
           path: dist
@@ -101,6 +110,10 @@ jobs:
           test -s "WhatCable-${RELEASE_TAG}-x86_64.flatpak"
           test -s "WhatCable-${RELEASE_TAG}-aarch64.flatpak"
           sha256sum -- *.flatpak > SHA256SUMS
+      - name: Attest validated release bundles
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-path: dist/*.flatpak
       - name: Create draft release with verified assets
         env:
           GH_TOKEN: ${{ github.token }}
@@ -111,22 +124,18 @@ jobs:
             echo "A GitHub release already exists for ${RELEASE_TAG}." >&2
             exit 1
           fi
-          gh release create "$RELEASE_TAG" dist/*.flatpak dist/SHA256SUMS \
+          gh release create "$RELEASE_TAG" ./dist/*.flatpak dist/SHA256SUMS \
             --repo "$GITHUB_REPOSITORY" --draft --generate-notes \
             --title "WhatCable ${RELEASE_VERSION}" --verify-tag
-      - name: Publish verified release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ inputs.tag }}
-        run: gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
       - name: Summarize release
         env:
           RELEASE_TAG: ${{ inputs.tag }}
           RELEASE_COMMIT: ${{ needs.verify.outputs.commit }}
         run: |
           {
-            echo '### Published release'
+            echo '### Draft release'
             echo "Tag: ${RELEASE_TAG}"
             echo "Source commit: ${RELEASE_COMMIT}"
             echo "Release: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG}"
           } >> "$GITHUB_STEP_SUMMARY"
+    timeout-minutes: 30

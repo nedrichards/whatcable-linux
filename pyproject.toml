@@ -3,9 +3,9 @@ pythonpath = ["src"]
 testpaths = ["tests"]
 
 [tool.ruff]
-required-version = "==0.17.4"
+required-version = ">=0.17.5"
 line-length = 120
-target-version = "py310"
+target-version = "py314"
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F"]

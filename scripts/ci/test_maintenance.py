@@ -25,6 +25,58 @@ health = load("dependency-health")
 
 
 class HealthTests(unittest.TestCase):
+    def test_checked_updates_change_both_manifests_but_leave_dependabot_pytest_pin_alone(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            pluggy = {
+                "type": "file",
+                "url": "https://files.pythonhosted.org/pluggy-1.0.0.whl",
+                "sha256": "0" * 64,
+                "x-checker-data": {"type": "pypi", "name": "pluggy", "packagetype": "bdist_wheel"},
+            }
+            pytest = {
+                "type": "file",
+                "url": "https://files.pythonhosted.org/pytest-9.2.0.whl",
+                "sha256": "1" * 64,
+                "x-checker-data": {"type": "pypi", "name": "pytest", "packagetype": "bdist_wheel"},
+            }
+            manifests = []
+            for name in ("devel.json", "stable.json"):
+                manifest = {
+                    "modules": [
+                        {
+                            "name": "python3-pytest",
+                            "build-commands": ['pip install "pytest==9.2.0"'],
+                            "sources": [dict(pluggy), dict(pytest)],
+                        },
+                        {"name": "app", "sources": [{"type": "git", "commit": "a" * 40}]},
+                    ]
+                }
+                path = root / name
+                path.write_text(json.dumps(manifest), encoding="utf-8")
+                manifests.append(path)
+            checked = {
+                "modules": [
+                    {
+                        "sources": [
+                            {**pluggy, "url": "https://files.pythonhosted.org/pluggy-2.0.0.whl", "sha256": "2" * 64},
+                            {**pytest, "url": "https://files.pythonhosted.org/pytest-10.0.0.whl", "sha256": "3" * 64},
+                        ]
+                    }
+                ]
+            }
+
+            health.apply_updates(manifests, checked, excluded_checker_names=("pytest",))
+
+            for path in manifests:
+                updated = json.loads(path.read_text(encoding="utf-8"))
+                sources = updated["modules"][0]["sources"]
+                self.assertEqual(sources[0]["url"], "https://files.pythonhosted.org/pluggy-2.0.0.whl")
+                self.assertEqual(sources[0]["sha256"], "2" * 64)
+                self.assertEqual(sources[1], pytest)
+                self.assertEqual(updated["modules"][0]["build-commands"], ['pip install "pytest==9.2.0"'])
+                self.assertEqual(updated["modules"][1]["sources"][0]["commit"], "a" * 40)
+
     def test_end_of_life_and_remote_failure_are_not_healthy(self):
         for status, output in [(0, "End-of-life: no longer supported"), (1, "Network unavailable")]:
             with self.subTest(status=status), tempfile.TemporaryDirectory() as tmp:
@@ -160,7 +212,9 @@ class PytestSyncTests(unittest.TestCase):
         wheel = {"filename": "pytest-99.0.0-py3-none-any.whl",
                  "url": "https://files.pythonhosted.org/pytest.whl",
                  "digests": {"sha256": "a" * 64}}
-        fetch = lambda url: {"urls": [wheel]}
+        def fetch(url):
+            return {"urls": [wheel]}
+
         result = sync.synchronize(manifest, "pytest==99.0.0\nruff==1.0", fetch)
         self.assertEqual(result["modules"][1:], original["modules"][1:])
         self.assertEqual(result["modules"][0]["sources"][:-1], original["modules"][0]["sources"][:-1])

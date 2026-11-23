@@ -25,6 +25,42 @@ def modules(items, parent):
             yield from modules(item.get("modules", []), parent)
 
 
+def apply_updates(filenames, checked, excluded_checker_names=()):
+    """Copy only checked dependency URL and checksum fields into manifests."""
+    excluded = set(excluded_checker_names)
+    updates = {}
+    for module in checked["modules"]:
+        for source in module["sources"]:
+            checker = source["x-checker-data"]
+            if checker.get("name") in excluded:
+                continue
+            key = json.dumps(checker, sort_keys=True)
+            value = {field: source[field] for field in ("url", "sha256") if field in source}
+            if key in updates and updates[key] != value:
+                raise ValueError("Conflicting checker results")
+            updates[key] = value
+    pending = []
+    for filename in filenames:
+        path = Path(filename)
+        original = path.read_text(encoding="utf-8")
+        manifest = json.loads(original)
+        for module in modules(manifest["modules"], path.parent):
+            for source in module.get("sources", []):
+                if not isinstance(source, dict) or source.get("type") not in ("archive", "file") or not source.get("x-checker-data"):
+                    continue
+                checker = source["x-checker-data"]
+                if checker.get("name") in excluded:
+                    continue
+                key = json.dumps(checker, sort_keys=True)
+                if key not in updates:
+                    raise ValueError(f"Missing checker result for {checker}")
+                source.update(updates[key])
+        if manifest != json.loads(original):
+            pending.append((path, json.dumps(manifest, indent=2, ensure_ascii=False) + "\n"))
+    for path, content in pending:
+        path.write_text(content, encoding="utf-8")
+
+
 def synchronize(manifest, requirements, fetch):
     pins = re.findall(r"^pytest==([0-9]+(?:\.[0-9]+)*)$", requirements, re.MULTILINE)
     if len(pins) != 1:
@@ -59,7 +95,12 @@ def main():
     parser.add_argument("manifests", nargs="+")
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument("--sync-pytest", type=Path, metavar="REQUIREMENTS")
+    parser.add_argument("--apply-updates", type=Path)
+    parser.add_argument("--exclude-checker-name", action="append", default=[])
     args = parser.parse_args()
+    if args.apply_updates:
+        apply_updates(args.manifests, json.loads(args.apply_updates.read_text(encoding="utf-8")), args.exclude_checker_name)
+        return 0
     if args.sync_pytest:
         if len(args.manifests) != 1:
             parser.error("--sync-pytest requires one development manifest")
@@ -156,7 +197,10 @@ def main():
             sources = [
                 s
                 for s in module.get("sources", [])
-                if isinstance(s, dict) and s.get("type") in ("archive", "file", "git") and s.get("x-checker-data")
+                if isinstance(s, dict)
+                and s.get("type") in ("archive", "file", "git")
+                and s.get("x-checker-data")
+                and s["x-checker-data"].get("name") not in args.exclude_checker_name
             ]
             if sources:
                 external.append(

@@ -7,6 +7,8 @@ on:
     paths:
       - '.github/workflows/dependency-health.yml'
       - 'scripts/ci/dependency-health.py'
+      - 'build-aux/com.nedrichards.WhatCable.Devel.json'
+      - 'build-aux/stable/com.nedrichards.WhatCable.json'
 permissions:
   contents: read
 concurrency:
@@ -59,6 +61,43 @@ jobs:
     defaults:
       run:
         shell: bash
+  updates:
+    if: >-
+      github.event_name != 'pull_request' &&
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    permissions:
+      contents: write
+      pull-requests: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+      - name: Prepare dependency-only checker input
+        run: python3 scripts/ci/dependency-health.py build-aux/com.nedrichards.WhatCable.Devel.json
+          build-aux/stable/com.nedrichards.WhatCable.json --prepare-only --exclude-checker-name pytest
+      - name: Update bundled dependency sources
+        uses:
+          docker://ghcr.io/flathub/flatpak-external-data-checker@sha256:1ebea5d5f44e5fe58ae6db0ce36808b263252092e1947e4e964aa00f03996c6a
+        with:
+          args: --edit-only /github/workspace/dependency-sources.json
+      - name: Apply checked source updates
+        run: python3 scripts/ci/dependency-health.py build-aux/com.nedrichards.WhatCable.Devel.json
+          build-aux/stable/com.nedrichards.WhatCable.json --apply-updates dependency-sources.json
+          --exclude-checker-name pytest
+      - name: Propose bundled dependency updates
+        uses: peter-evans/create-pull-request@3ffccacd46053766916f087ce41d627c0b8cf2d1  # v8.1.3
+        with:
+          branch: automation/flatpak-dependencies
+          commit-message: 'build(flatpak): update bundled dependencies'
+          title: 'Update bundled Flatpak dependencies'
+          body: |
+            Updates checker-managed dependency URLs and checksums in the development and stable manifests.
+            The pytest package pin is kept in sync through the existing Dependabot workflow.
+          add-paths: |
+            build-aux/com.nedrichards.WhatCable.Devel.json
+            build-aux/stable/com.nedrichards.WhatCable.json
   sources:
     name: Bundled source metadata
     if: github.event_name != 'pull_request'
@@ -70,7 +109,7 @@ jobs:
           persist-credentials: false
       - name: Prepare architecture-independent source inventory
         run: python3 scripts/ci/dependency-health.py build-aux/com.nedrichards.WhatCable.Devel.json
-          build-aux/stable/com.nedrichards.WhatCable.json --prepare-only
+          build-aux/stable/com.nedrichards.WhatCable.json --prepare-only --exclude-checker-name pytest
       - name: Check published dependency versions
         uses:
           docker://ghcr.io/flathub/flatpak-external-data-checker@sha256:1ebea5d5f44e5fe58ae6db0ce36808b263252092e1947e4e964aa00f03996c6a
